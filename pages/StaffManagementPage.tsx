@@ -26,6 +26,9 @@ const emptyFormData: Omit<StaffMember, 'id' | 'subordinates'> = { // Exclude sub
 // FIX: Update StaffWithPending type to include pendingFunction as Designation
 type StaffWithPending = StaffMember & { pendingBranchName?: string; pendingFunction?: Designation; };
 
+// Admin user ID (ensure this matches the ID in authService.ts)
+const ADMIN_USER_ID = 'admin-user-0';
+
 // Form validation function for StaffManagementPage
 const validateForm = (
     formData: Omit<StaffMember, 'id' | 'subordinates'>,
@@ -442,8 +445,8 @@ export const StaffManagementPage: React.FC<{ manager: User }> = ({ manager }) =>
         };
         reader.onerror = () => { 
             if (isMounted.current) {
-                setLoading(false); 
                 setNotification({ message: 'Failed to read file.', type: 'error' }); 
+                setIsSubmitting(false);
             }
         };
         reader.readAsArrayBuffer(file);
@@ -765,7 +768,7 @@ export const StaffManagementPage: React.FC<{ manager: User }> = ({ manager }) =>
                                             value={formData.employeeCode} 
                                             onChange={handleInputChange} 
                                             required 
-                                            disabled={!!editingStaff} // Employee Code is read-only when editing
+                                            disabled={editingStaff !== null && (manager.role !== 'admin' || editingStaff.id === ADMIN_USER_ID || editingStaff.id === manager.id)} // Allow admin to edit others' employee codes
                                             className={`input-style w-full disabled:bg-gray-200 dark:disabled:bg-gray-700 ${formErrors.employeeCode ? 'input-error' : ''}`}
                                         />
                                         {formErrors.employeeCode && <p className="error-text">{formErrors.employeeCode}</p>}

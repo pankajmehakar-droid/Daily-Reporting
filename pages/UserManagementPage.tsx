@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User, Role, DESIGNATIONS, StaffMember, Branch, Zone, Region, District, Designation } from '../types'; // Import Zone, Region, District
 import { getUsers, reinitializeAuth } from '../services/authService';
@@ -1046,7 +1045,7 @@ export const UserManagementPage: React.FC<{ currentUser: User }> = ({ currentUse
                                             value={formData.employeeCode} 
                                             onChange={handleInputChange} 
                                             required 
-                                            disabled={!!editingUser || editingUser?.id === ADMIN_USER_ID} // Employee Code only editable for new users OR if admin user
+                                            disabled={editingUser !== null && (currentUser.role !== 'admin' || editingUser.id === ADMIN_USER_ID || editingUser.id === currentUser.id)} // Allow admin to edit others' employee codes
                                             className={`mt-1 block w-full input-style disabled:bg-gray-200 dark:disabled:bg-gray-700 ${formErrors.employeeCode ? 'input-error' : ''}`}
                                         />
                                         {formErrors.employeeCode && <p className="error-text">{formErrors.employeeCode}</p>}

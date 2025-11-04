@@ -13,7 +13,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showLogins, setShowLogins] = useState(false);
+  const [showLogins, setShowLogins] = useState(false); // Kept for potential manual triggering/debugging
   
   const isMounted = useRef(false);
 
@@ -47,6 +47,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     }
   };
 
+  // The modal component is kept but not actively opened from the UI
   const LoginSuggestionsModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4" aria-modal="true" role="dialog">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
@@ -163,21 +164,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
           </form>
         </div>
-         <div className="text-center mt-6 text-xs text-gray-500 dark:text-gray-400 space-y-2">
-            <div>
-                <p><span className="font-semibold">General Login:</span> Use your <span className="font-semibold">Employee Code</span> for both username and password.</p>
-                <p><span className="font-semibold">Admin Login:</span> admin / admin123</p>
-                <p><span className="font-semibold">Zonal Manager Login:</span> zm / zm123</p>
-            </div>
-            <button
-                onClick={() => setShowLogins(true)}
-                className="flex items-center gap-2 mx-auto px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-md shadow-sm hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                aria-label="View all login credentials"
-            >
-                <UsersIcon className="w-4 h-4" />
-                View All Login Credentials
-            </button>
-        </div>
+         {/* Removed: Login hints and "View All Login Credentials" button */}
       </div>
     </div>
   );
