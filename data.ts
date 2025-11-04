@@ -73,7 +73,7 @@ export const FULL_STAFF_DATA: Omit<StaffMember, 'id'>[] = [
     districtName: "YAVATMAL", 
     branchName: "NER",
     employeeName: "PANKAJ MEHAKAR",
-    employeeCode: "6642",
+    employeeCode: "1734",
     function: "BRANCH MANAGER",
     contactNumber: "9000011111",
     reportsToEmployeeCode: "270" // Reports to GAURAV WAKODIKAR (District Head)
