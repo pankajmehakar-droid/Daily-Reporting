@@ -1,0 +1,5 @@
+{
+  "name": "Daily Reporting",
+  "description": "The Daily Reporting app is designed to simplify business performance tracking and reporting. It enables teams to submit daily reports, track month-to-date (MTD) business progress, and share performance updates seamlessly. With an intuitive interface, users can quickly log daily activities, monitor their targets, and generate summaries for management review — ensuring transparency, accountability, and real-time insights into business performance.",
+  "requestFramePermissions": []
+}
