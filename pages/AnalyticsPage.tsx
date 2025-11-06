@@ -383,7 +383,7 @@ const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ data }) => {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <SummaryCard title="Avg. Daily Amount" value={analytics.averageDailyAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 })} icon={<DollarSignIcon className="w-6 h-6" />} color="text-yellow-500" />
-                <SummaryCard title="Highest Day" value={parseAndFormatDate(analytics.highestDay.date)} icon={<CalendarIcon className="w-6 h-6" />} color="text-green-500" />
+                <SummaryCard title="Highest Day" value={analytics.highestDay.date === 'N/A' ? 'No Data' : parseAndFormatDate(analytics.highestDay.date)} icon={<CalendarIcon className="w-6 h-6" />} color="text-green-500" />
                 <SummaryCard title="Total Transactions" value={analytics.totalTransactions.toString()} icon={<HashIcon className="w-6 h-6" />} color="text-blue-500" />
                 <SummaryCard title="Top Product" value={analytics.topProduct} icon={<TrendingUpIcon className="w-6 h-6" />} color="text-indigo-500" />
             </div>
@@ -464,4 +464,3 @@ const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ data }) => {
 };
 
 export default AnalyticsPage;
-    

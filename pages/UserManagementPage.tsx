@@ -534,7 +534,7 @@ export const UserManagementPage: React.FC<{ currentUser: User }> = ({ currentUse
             allRawStaff, // Pass full staff list for uniqueness and hierarchy checks
             editingUser,
             currentUser.role,
-            allZones, allRegions, allDistricts, // Pass for validation
+            allZones, allRegions, allDistricts
         );
 
         if (Object.keys(validationErrors).length > 0) {

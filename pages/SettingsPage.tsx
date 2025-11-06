@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import { MOCK_PASSWORDS, reinitializeAuth } from '../services/authService';
@@ -275,7 +276,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onLogout }) => {
                             </div>
                         )}
                         <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
-                            This action will permanently delete ALL user, branch, and KRA data from the application, resetting it to a clean state while preserving your admin account.
+                            This action will permanently delete ALL user, branch, and product mapping data from the application, resetting it to a clean state while preserving your admin account.
                         </p>
                         <button
                             onClick={() => setIsResetDataModalOpen(true)}
@@ -352,7 +353,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onLogout }) => {
                             <h3 className="mt-5 text-lg font-medium text-gray-900 dark:text-gray-100">Reset All App Data</h3>
                             <div className="mt-2">
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    Are you absolutely sure you want to reset <strong>ALL</strong> application data? This will delete all staff (except your admin account), all branches, and all KRA mappings. This action is irreversible.
+                                    Are you absolutely sure you want to reset <strong>ALL</strong> application data? This will delete all staff (except your admin account), all branches, and all product mappings. This action is irreversible.
                                 </p>
                             </div>
                         </div>

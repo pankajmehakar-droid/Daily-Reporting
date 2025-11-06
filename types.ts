@@ -1,3 +1,5 @@
+
+
 export type Role = 'admin' | 'user' | 'manager';
 
 export interface User {
@@ -124,7 +126,7 @@ export interface ChartDataPoint {
 
 export type TargetPeriodType = 'monthly' | 'mtd' | 'ytd';
 
-export interface Kra {
+export interface Target {
   id: string;
   staffEmployeeCode: string;
   metric: string;
@@ -159,41 +161,18 @@ export interface ProductMetric {
   contributesToOverallGoals: boolean; // New: whether this metric contributes to overall goals
 }
 
-
-export const BRANCH_NAMES = [
-  'AHERI', 'AHMADNAGAR', 'AKOLA', 'AKOT', 'ALMORA', 'Ambad', 'AMGAON', 'AMRAVATI', 'ANJANGAON SURJI', 'ARMORI', 'ARNI', 'ARVI', 'ASHTI', 'AURANGABAD', 'BADDI', 'Badlapur', 'Balaghat', 'BALLARPUR', 'Beed', 'Belagavi', 'Belapur', 'Betul', 'BHADRAVATI', 'BHANDARA', 'Bhayander', 'BHIWANDI', 'BHIWAPUR', 'Bhopal', 'Bidar', 'Borivali', 'BRAMHPURI', 'BULDHANA', 'Burhanpur', 'CHAMORSHI', 'CHAMPAWAT', 'CHANDRAPUR', 'CHANDUR BAZAR', 'CHANDUR RAILWAY', 'Chembur', 'Chhindwara', 'CHIKHALI', 'Chitradurga', 'Dadar', 'DARWHA', 'DARYAPUR', 'Davangere', 'Dehradun', 'DEOLI', 'DEORI', 'DEULGAONRAJA', 'Dhamangaon Railway', 'DHANORA', 'Dhar', 'Dharashiv', 'Dharwad', 'Dhule', 'DIGRAS', 'Doddaballapura', 'Dombivali', 'GADCHIROLI', 'GANDHIBAG', 'GHATANJI', 'GHATKOPAR', 'GONDIA', 'GONDIA GOLD BRANCH', 'GONDPIPARI', 'GOREGAON', 'HALDWANI', 'Harda', 'HARIDWAR', 'Hassan', 'Haveri', 'HINGANGHAT', 'HINGNA', 'Hingoli', 'Hubli', 'Indore', 'Jabalpur', 'Jalgaon', 'JALGAON JAMOD', 'JALNA', 'Jhabua', 'Jintur', 'Kalaburagi', 'KALAMB', 'Kalamboli', 'KALMESHWAR', 'Kalyan', 'KANDIVALI', 'KANHAN', 'KANNAD', 'KARANJA GHADGE', 'KARANJA LAD', 'KASHIPUR', 'KATNI', 'KATOL', 'Khairlanji', 'KHAMGAON', 'Khandwa', 'Kharadi', 'Kharghar', 'KHATIMA', 'KICHHA', 'KIRNAPUR', 'Kolar', 'KOLHAPUR', 'KOPERKHAIRNE', 'Koppal', 'KORCHI', 'KOTDWAR', 'KUHI', 'KULLU', 'KURKHEDA', 'LAKHANDUR', 'LAKHANI', 'LANJI', 'Latur', 'LONAR', 'MAHAGAON', 'Malad', 'MALEGAON', 'Malegaon (Nashik)', 'MALKAPUR', 'Mandideep', 'Mandla', 'Mandsaur', 'Mandya', 'Mangalore', 'Mangrulpir', 'MANORA', 'MAREGAON', 'Marol - Andheri', 'MAUDA', 'MEHKAR', 'Millers Road', 'MIRA ROAD', 'MOHADI', 'MORGAON ARJUNI', 'MORSHI', 'MUL', 'MULCHERA', 'Mulund', 'MURTIJAPUR', 'Mysore', 'NAGBHID', 'NAGPUR', 'NAGPUR WEALTH BRANCH', 'Nalasopara', 'NANDED', 'NANDURA', 'NANDURBAR', 'NARKHED', 'Narmadapuram', 'Narshingpur', 'NASHIK', 'NER', 'Nerul', 'Palghar', 'PANDHARKAWADA', 'PANDHURNA', 'PANVEL', 'Paratwada', 'PARBHANI', 'PARSHIVNI', 'PATUR', 'PAUNI', 'PITHORAGARH', 'Puducherry', 'PUNE AUNDH', 'PUSAD', 'Rajgarh', 'RALEGAON', 'RAMTEK', 'Ranebennur', 'RATHI NAGAR', 'Ratnagiri', 'RISHIKESH', 'RISOD', 'ROORKEE', 'RUDRAPUR', 'SADAK ARJUNI', 'SAKOLI', 'SALEKASA', 'SAMUDRAPUR', 'Sangli', 'Sangrampur', 'SAONER', 'SATARA', 'SAWALI', 'Seawood', 'Sehore', 'SELOO', 'SHEGAON', 'Shimla', 'Shivamogga', 'SINDEWAHI', 'Sion', 'Sirsi', 'SITARGANJ', 'SOLAN', 'Solapur', 'Srinagar', 'TANAKPUR', 'Thane', 'TIRODA', 'Titwala', 'TULJAPUR', 'TUMSAR', 'Udgir', 'Udupi', 'Ujjain', 'Ulhasnagar', 'UMARKHED', 'UMRED', 'VAIJAPUR', 'VARTAKNAGAR', 'VASAI', 'Vashi', 'Vidisha', 'Vijaypura', 'VIKASNAGAR', 'Virar', 'WADSA', 'WANI', 'Waraseoni', 'WARDHA', 'WARUD', 'WASHIM', 'Yadgir', 'YAVATMAL', 'ZARI JAMNI'
-] as const;
-
-export const DISTRICT_NAMES = [
-  'AHMEDNAGAR', 'AKOLA', 'ALMORA', 'AMRAVATI', 'AURANGABAD', 'BALAGHAT', 'BEED', 'BELAGAVI', 'BENGALURU RURAL', 'BENGALURU URBAN', 'BETUL', 'BHANDARA', 'BHOPAL', 'BIDAR', 'BULDHANA', 'BURHANPUR', 'CHAMPAWAT', 'CHANDRAPUR', 'CHHINDWARA', 'CHITRADURGA', 'DAKSHINA KANNADA', 'DAVANGERE', 'DEHRADUN', 'DHAR', 'DHARASHIV', 'DHARWAD', 'DHULE', 'GADCHIROLI', 'GONDIA', 'HARDA', 'HARIDWAR', 'HASSAN', 'HAVERI', 'HINGOLI', 'INDORE', 'JABALPUR', 'JALGAON', 'JALNA', 'JHABUA', 'KALABURAGI', 'KATNI', 'KHANDWA', 'KOLAR', 'KOLHAPUR', 'KOPPAL', 'KULLU', 'LATUR', 'MANDLA', 'MANDSAUR', 'MANDYA', 'MUMBAI (SUBURBAN)', 'MYSORE', 'NAGPUR', 'NAINITAL', 'NANDED', 'NANDURA', 'NANDURBAR', 'NARMADAPURAM', 'NARSINGHPUR', 'NASHIK', 'PANDHURNA', 'PARBHANI', 'PAURI GARHWAL', 'PITHORAGARH', 'PUDUCHERRY', 'PUNE', 'RAISEN', 'RAJGARH', 'RATNAGIRI', 'SANGLI', 'SATARA', 'SEHORE', 'SHIMLA', 'SHIVAMOGGA', 'SOLAN', 'SOLAPUR', 'SRINAGAR', 'TULJAPUR', 'UDHAM SINGH NAGAR', 'UDUPI', 'UJJAIN', 'UTTARA KANNADA', 'VIDISHA', 'VIJAYPURA', 'WARDHA', 'WASHIM', 'YADGIR', 'YAVATMAL'
-] as const;
-
-export const ZONES = Array.from({ length: 15 }, (_, i) => `Zone-${i + 1}`);
-export const REGIONS = Array.from({ length: 15 }, (_, i) => `Region-${i + 1}`);
-
-// New interfaces for Projection and Demand
-export interface Projection {
-  id: string;
-  staffEmployeeCode: string;
-  date: string; // YYYY-MM-DD
-  metric: string;
-  value: number;
+// New: Interface for product-wise target vs achievement data
+export interface ProductWiseTargetVsAchievement {
+  product: string;
+  amountTarget: number;
+  amountAchieved: number;
+  amountPercentage: number;
+  acTarget: number;
+  acAchieved: number;
+  acPercentage: number;
 }
 
-export interface Demand {
-  id: string;
-  staffEmployeeCode: string;
-  date: string; // YYYY-MM-DD
-  metric: string;
-  value: number;
-  source: string; // e.g., 'KRA', 'Manual Input', 'System Generated'
-}
-
-export const PROJECTION_DEMAND_METRIC_NAMES = [
-  'DDS AMT', 'DAM AMT', 'MIS AMT', 'FD AMT', 'RD AMT', 'SMBG AMT', 'CUR-GOLD-AMT', 'CUR-WEL-AMT', 'SAVS-AMT', 'INSU AMT', 'TASC AMT', 'SHARE AMT',
-  'DDS AC', 'DAM AC', 'MIS AC', 'FD AC', 'RD AC', 'SMBG AC', 'CUR-GOLD-AC', 'CUR-WEL-AC', 'SAVS-AC', 'INSU AC', 'TASC AC', 'SHARE AC','NEW-SS/AGNT', 
-] as const;
-
+// FIX: Added missing type definitions
 export interface BranchTarget {
   id: string;
   branchName: string;
@@ -203,25 +182,11 @@ export interface BranchTarget {
   dueDate?: string; // YYYY-MM-DD
 }
 
-export interface DemandRunRateResult {
-  monthlyTargetAmount: number;
-  monthlyTargetAccount: number;
-  mtdAchievementAmount: number;
-  mtdAchievementAccount: number;
-  remainingTargetAmount: number;
-  remainingTargetAccount: number;
-  daysInMonth: number;
-  daysRemainingInMonth: number;
-  dailyRunRateAmount: number;
-  dailyRunRateAccount: number;
-}
-
-// New interface for Daily Achievement Records
 export interface DailyAchievementRecord {
-  id: string; // Unique ID for each record
+  id: string;
   date: string; // YYYY-MM-DD
   'STAFF NAME': string;
-  'BRANCH NAME': string; // Added to align with report structure
+  'BRANCH NAME': string;
   'DDS AMT': number;
   'DAM AMT': number;
   'MIS AMT': number;
@@ -249,13 +214,68 @@ export interface DailyAchievementRecord {
   'SHARE AC': number;
   'TOTAL ACCOUNTS': number;
   'TOTAL AMOUNTS': number;
-  'GRAND TOTAL AC': number; // Added to align with report structure
-  'GRAND TOTAL AMT': number; // Added to align with report structure
+  'GRAND TOTAL AC': number;
+  'GRAND TOTAL AMT': number;
+  [key: string]: string | number;
 }
 
-// New interface for Designation KRA mapping
-export interface DesignationKRA {
+export interface DesignationTarget {
   id: string;
-  designation: Designation; // The designation this KRA mapping is for
-  metricIds: string[]; // List of ProductMetric.id that are applicable to this designation
+  designation: Designation;
+  metricIds: string[];
 }
+
+export interface DailyRunRateResult {
+  monthlyTargetAmount: number;
+  monthlyTargetAccount: number;
+  mtdAchievementAmount: number;
+  mtdAchievementAccount: number;
+  remainingTargetAmount: number;
+  remainingTargetAccount: number;
+  daysInMonth: number;
+  daysRemainingInMonth: number;
+  dailyRunRateAmount: number;
+  dailyRunRateAccount: number;
+}
+
+
+export const BRANCH_NAMES = [
+  'AHERI', 'AHMADNAGAR', 'AKOLA', 'AKOT', 'ALMORA', 'Ambad', 'AMGAON', 'AMRAVATI', 'ANJANGAON SURJI', 'ARMORI', 'ARNI', 'ARVI', 'ASHTI', 'AURANGABAD', 'BADDI', 'Badlapur', 'Balaghat', 'BALLARPUR', 'Beed', 'Belagavi', 'Belapur', 'Betul', 'BHADRAVATI', 'BHANDARA', 'Bhayander', 'BHIWANDI', 'BHIWAPUR', 'Bhopal', 'Bidar', 'Borivali', 'BRAMHPURI', 'BULDHANA', 'Burhanpur', 'CHAMORSHI', 'CHAMPAWAT', 'CHANDRAPUR', 'CHANDUR BAZAR', 'CHANDUR RAILWAY', 'Chembur', 'Chhindwara', 'CHIKHALI', 'Chitradurga', 'Dadar', 'DARWHA', 'DARYAPUR', 'Davangere', 'Dehradun', 'DEOLI', 'DEORI', 'DEULGAONRAJA', 'Dhamangaon Railway', 'DHANORA', 'Dhar', 'Dharashiv', 'Dharwad', 'Dhule', 'DIGRAS', 'Doddaballapura', 'Dombivali', 'GADCHIROLI', 'GANDHIBAG', 'GHATANJI', 'GHATKOPAR', 'GONDIA', 'GONDIA GOLD BRANCH', 'GONDPIPARI', 'GOREGAON', 'HALDWANI', 'Harda', 'HARIDWAR', 'Hassan', 'Haveri', 'HINGANGHAT', 'HINGNA', 'Hingoli', 'Hubli', 'Indore', 'Jabalpur', 'Jalgaon', 'JALGAON JAMOD', 'JALNA', 'Jhabua', 'Jintur', 'Kalaburagi', 'KALAMB', 'Kalamboli', 'KALMESHWAR', 'Kalyan', 'KANDIVALI', 'KANHAN', 'KANNAD', 'KARANJA GHADGE', 'KARANJA LAD', 'KASHIPUR', 'KATNI', 'KATOL', 'Khairlanji', 'KHAMGAON', 'Khandwa', 'Kharadi', 'Kharghar', 'KHATIMA', 'KICHHA', 'KIRNAPUR', 'Kolar', 'KOLHAPUR', 'KOPERKHAIRNE', 'Koppal', 'KORCHI', 'KOTDWAR', 'KUHI', 'KULLU', 'KURKHEDA', 'LAKHANDUR', 'LAKHANI', 'LANJI', 'Latur', 'LONAR', 'MAHAGAON', 'Malad', 'MALEGAON', 'Malegaon (Nashik)', 'MALKAPUR', 'Mandideep', 'Mandla', 'Mandsaur', 'Mandya', 'Mangalore', 'Mangrulpir', 'MANORA', 'MAREGAON', 'Marol - Andheri', 'MAUDA', 'MEHKAR', 'Millers Road', 'MIRA ROAD', 'MOHADI', 'MORGAON ARJUNI', 'MORSHI', 'MUL', 'MULCHERA', 'Mulund', 'MURTIJAPUR', 'Mysore', 'NAGBHID', 'NAGPUR', 'NAGPUR WEALTH BRANCH', 'Nalasopara', 'NANDED', 'NANDURA', 'NANDURBAR', 'NARKHED', 'Narmadapuram', 'Narshingpur', 'NASHIK', 'NER', 'Nerul', 'Palghar', 'PANDHARKAWADA', 'PANDHURNA', 'PANVEL', 'Paratwada', 'PARBHANI', 'PARSHIVNI', 'PATUR', 'PAUNI', 'PITHORAGARH', 'Puducherry', 'PUNE AUNDH', 'PUSAD', 'Rajgarh', 'RALEGAON', 'RAMTEK', 'Ranebennur', 'RATHI NAGAR', 'Ratnagiri', 'RISHIKESH', 'RISOD', 'ROORKEE', 'RUDRAPUR', 'SADAK ARJUNI', 'SAKOLI', 'SALEKASA', 'SAMUDRAPUR', 'Sangli', 'Sangrampur', 'SAONER', 'SATARA', 'SAWALI', 'Seawood', 'Sehore', 'SELOO', 'SHEGAON', 'Shimla', 'Shivamogga', 'SINDEWAHI', 'Sion', 'Sirsi', 'SITARGANJ', 'SOLAN', 'Solapur', 'Srinagar', 'TANAKPUR', 'Thane', 'TIRODA', 'Titwala', 'TULJAPUR', 'TUMSAR', 'Udgir', 'Udupi', 'Ujjain', 'Ulhasnagar', 'UMARKHED', 'UMRED', 'VAIJAPUR', 'VARTAKNAGAR', 'VASAI', 'Vashi', 'Vidisha', 'Vijaypura', 'VIKASNAGAR', 'Virar', 'WADSA', 'WANI', 'Waraseoni', 'WARDHA', 'WARUD', 'WASHIM', 'Yadgir', 'YAVATMAL', 'ZARI JAMNI'
+] as const;
+
+export const DISTRICT_NAMES = [
+  'AHMEDNAGAR', 'AKOLA', 'ALMORA', 'AMRAVATI', 'AURANGABAD', 'BALAGHAT', 'BEED', 'BELAGAVI', 'BENGALURU RURAL', 'BENGALURU URBAN', 'BETUL', 'BHANDARA', 'BHOPAL', 'BIDAR', 'BULDHANA', 'BURHANPUR', 'CHAMPAWAT', 'CHANDRAPUR', 'CHHINDWARA', 'CHITRADURGA', 'DAKSHINA KANNADA', 'DAVANGERE', 'DEHRADUN', 'DHAR', 'DHARASHIV', 'DHARWAD', 'DHULE', 'GADCHIROLI', 'GONDIA', 'HARDA', 'HARIDWAR', 'HASSAN', 'HAVERI', 'HINGOLI', 'INDORE', 'JABALPUR', 'JALGAON', 'JALNA', 'JHABUA', 'KALABURAGI', 'KATNI', 'KHANDWA', 'KOLAR', 'KOLHAPUR', 'KOPPAL', 'KULLU', 'LATUR', 'MANDLA', 'MANDSAUR', 'MANDYA', 'MUMBAI (SUBURBAN)', 'MYSORE', 'NAGPUR', 'NAINITAL', 'NANDED', 'NANDURA', 'NANDURBAR', 'NARMADAPURAM', 'NARSINGHPUR', 'NASHIK', 'PANDHURNA', 'PARBHANI', 'PAURI GARHWAL', 'PITHORAGARH', 'PUDUCHERRY', 'PUNE', 'RAISEN', 'RAJGARH', 'RATNAGIRI', 'SANGLI', 'SATARA', 'SEHORE', 'SHIMLA', 'SHIVAMOGGA', 'SOLAN', 'SOLAPUR', 'SRINAGAR', 'TULJAPUR', 'UDHAM SINGH NAGAR', 'UDUPI', 'UJJAIN', 'UTTARA KANNADA', 'VIDISHA', 'VIJAYPURA', 'WARDHA', 'WASHIM', 'YADGIR', 'YAVATMAL'
+] as const;
+
+export const ZONES = Array.from({ length: 15 }, (_, i) => `Zone-${i + 1}`);
+export const REGIONS = Array.from({ length: 15 }, (_, i) => `Region-${i + 1}`);
+
+// New interfaces for Projection and Demand
+export interface Projection {
+  id: string;
+  staffEmployeeCode: string;
+  date: string; // YYYY-MM-DD
+  metric: string;
+  value: number;
+}
+
+export interface Demand {
+  id: string;
+  staffEmployeeCode: string;
+  date: string; // YYYY-MM-DD
+  metric: string;
+  value: number;
+  source: string; // e.g., 'Target', 'Manual Input', 'System Generated'
+}
+
+export interface Highlight {
+  id: string;
+  imageUrl: string;
+  uploadedBy: string;
+  timestamp: string;
+}
+
+export const PROJECTION_DEMAND_METRIC_NAMES = [
+  'DDS AMT', 'DAM AMT', 'MIS AMT', 'FD AMT', 'RD AMT', 'SMBG AMT', 'CUR-GOLD-AMT', 'CUR-WEL-AMT', 'SAVS-AMT', 'INSU AMT', 'TASC AMT', 'SHARE AMT',
+  'DDS AC', 'DAM AC', 'MIS AC', 'FD AC', 'RD AC', 'SMBG AC', 'CUR-GOLD-AC', 'CUR-WEL-AC', 'SAVS-AC', 'NEW-SS/AGNT', 'INSU AC', 'TASC AC', 'SHARE AC'
+] as const;

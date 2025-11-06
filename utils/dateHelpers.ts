@@ -1,3 +1,4 @@
+
 export const getMonthString = (date = new Date()): string => {
     return date.toISOString().slice(0, 7); // YYYY-MM
 };
@@ -97,10 +98,17 @@ export const getDateRangeFromRecords = (records: { [key: string]: string | numbe
 };
 
 export const formatDisplayDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return 'Not Set';
     // dateString is YYYY-MM-DD
-    const date = new Date(dateString + 'T00:00:00'); // To avoid timezone issues
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    try {
+        const date = new Date(dateString + 'T00:00:00'); // To avoid timezone issues
+        if (isNaN(date.getTime())) {
+            return 'Invalid Date';
+        }
+        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (e) {
+        return 'Error';
+    }
 };
 
 // Updated getKraStatus to handle periodType
@@ -130,3 +138,4 @@ export const getKraStatus = (dueDate: string | undefined, periodType?: TargetPer
         return { text: `Due in ${diffDays} day(s)`, color: 'text-yellow-600 dark:text-yellow-400' };
     }
     return { text: `On Track (Due: ${formatDisplayDate(dueDate)})`, color: 'text-green-600 dark:text-green-400' };
+};

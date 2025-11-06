@@ -75,12 +75,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">Admin</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 font-mono">admin (pw: admin123)</td>
               </tr>
-              <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">Zonal Manager User</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">Manager (Zonal)</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 font-mono">zm (pw: zm123)</td>
-              </tr>
-              {allStaff.filter(s => s.employeeCode !== 'ADMIN' && s.employeeCode !== 'ZM001').map(staff => (
+              {allStaff.filter(s => s.employeeCode !== 'ADMIN').map(staff => (
                 <tr key={staff.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{staff.employeeName}</td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{staff.function.toUpperCase().includes('BRANCH MANAGER') || staff.function.toUpperCase().includes('HEAD') || staff.function.toUpperCase().includes('TL') ? 'Manager' : 'User'}</td>

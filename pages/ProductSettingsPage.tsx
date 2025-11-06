@@ -14,7 +14,7 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
     if (currentUser.role !== 'admin') {
         return (
             <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">{onClose ? '' : 'Product Settings'}</h2>
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">{onClose ? '' : 'Product Metric'}</h2>
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center">
                     <p className="text-red-500 dark:text-red-400 font-semibold">
                         You do not have permission to view Product Settings.
@@ -146,7 +146,7 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">{onClose ? '' : 'Product Settings'}</h2> {/* Title hidden if in modal, parent handles title */}
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">{onClose ? '' : 'Product Metric'}</h2> {/* Title hidden if in modal, parent handles title */}
                 <button onClick={() => openModal()} className="btn btn-indigo flex items-center gap-2">
                     <PlusIcon className="w-5 h-5" /> Add New Metric
                 </button>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { User, Projection, StaffMember, PROJECTION_DEMAND_METRIC_NAMES } from '../types';
 import CollapsibleSection from '../components/CollapsibleSection';
@@ -8,9 +7,8 @@ import { LoaderIcon, DollarSignIcon, HashIcon, UsersIcon, CalendarIcon, FileDown
 import { getAllProjections, getAllStaff, getRecursiveSubordinateInfo } from '../services/dataService';
 import { getMonthString, getDateRangeFromRecords, formatDisplayDate, convertYYYYMMDDtoDDMMYYYY } from '../utils/dateHelpers';
 
-// Declare jsPDF and autoTable from the script tags in index.html
+// Declare jsPDF from the script tags in index.html
 declare const jsPDF: any;
-declare const autoTable: any;
 
 interface ProjectionReportPageProps {
   currentUser: User;
@@ -30,7 +28,7 @@ const handleExportPdf = (tableId: string, fileName: string, title: string) => {
     return;
   }
 
-  const doc = new jsPDF.jsPDF({
+  const doc = new jsPDF({
     orientation: 'landscape', // or 'portrait'
     unit: 'pt',
     format: 'a4',
@@ -324,4 +322,3 @@ const ProjectionReportPage: React.FC<ProjectionReportPageProps> = ({ currentUser
 };
 
 export default ProjectionReportPage;
-    

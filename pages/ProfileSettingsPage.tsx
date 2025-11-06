@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, DESIGNATIONS } from '../types';
-import { getStaffById, updateStaff, ADMIN_USER_ID } from '../services/dataService'; // Import ADMIN_USER_ID
+import { User, StaffMember, DESIGNATIONS } from '../types';
+import { getStaffById, updateStaff, ADMIN_USER_ID, getAllStaff } from '../services/dataService'; // Import ADMIN_USER_ID and getAllStaff
 import { LoaderIcon, CheckCircleIcon, AlertTriangleIcon, EditIcon } from '../components/icons';
 
 interface ProfileSettingsPageProps {
@@ -19,11 +19,24 @@ const ProfileSettingsPage: React.FC<ProfileSettingsPageProps> = ({ currentUser, 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
+    const [managerName, setManagerName] = useState<string>('N/A');
 
     const isMounted = useRef(false);
 
     useEffect(() => {
         isMounted.current = true;
+        const fetchAllStaffData = async () => {
+            try {
+                const staffList = await getAllStaff();
+                if (isMounted.current) {
+                    setAllStaff(staffList);
+                }
+            } catch (err) {
+                console.error("Failed to fetch staff data for manager lookup.");
+            }
+        };
+        fetchAllStaffData();
         return () => {
             isMounted.current = false;
         };
@@ -38,6 +51,17 @@ const ProfileSettingsPage: React.FC<ProfileSettingsPageProps> = ({ currentUser, 
             employeeCode: currentUser.employeeCode || '',
         });
     }, [currentUser]);
+
+    // Find manager name when staff list or current user changes
+    useEffect(() => {
+        if (currentUser.reportsToEmployeeCode && allStaff.length > 0) {
+            const manager = allStaff.find(s => s.employeeCode === currentUser.reportsToEmployeeCode);
+            setManagerName(manager ? `${manager.employeeName} (${manager.employeeCode})` : 'N/A');
+        } else {
+            setManagerName('N/A');
+        }
+    }, [currentUser.reportsToEmployeeCode, allStaff]);
+
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -118,6 +142,24 @@ const ProfileSettingsPage: React.FC<ProfileSettingsPageProps> = ({ currentUser, 
             />
         </div>
     );
+    
+    const renderReadOnlyField = (label: string, value: string | undefined | null) => (
+        <div>
+            <label className="label-style">{label}</label>
+            <p className="mt-1 block w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm sm:text-sm text-gray-700 dark:text-gray-300">
+                {value || 'N/A'}
+            </p>
+        </div>
+    );
+    
+    const renderReadOnlyListField = (label: string, items: string[] | undefined) => (
+         <div>
+            <label className="label-style">{label}</label>
+            <div className="mt-1 block w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm sm:text-sm text-gray-700 dark:text-gray-300 min-h-[42px]">
+                {items && items.length > 0 ? items.join(', ') : 'N/A'}
+            </div>
+        </div>
+    );
 
     return (
         <div className="max-w-2xl mx-auto">
@@ -149,33 +191,28 @@ const ProfileSettingsPage: React.FC<ProfileSettingsPageProps> = ({ currentUser, 
                     </div>
                 )}
 
-                <div className="space-y-4">
-                    {/* Staff Name field: Made read-only */}
+                <fieldset className="space-y-4 pt-4">
+                    <legend className="text-base font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2 mb-2">Basic Information</legend>
                     {renderInputField("employeeName", "Staff Name", formData.employeeName, handleInputChange, true)}
                     {renderInputField("employeeCode", "Employee Code", formData.employeeCode, handleInputChange, true)}
-                    
-                    <div>
-                        <label htmlFor="designation" className="label-style">Designation</label>
-                        <select
-                            id="designation"
-                            name="designation"
-                            value={currentUser.id === ADMIN_USER_ID ? "ADMINISTRATOR" : formData.designation} // Conditional display for admin
-                            onChange={handleInputChange}
-                            required
-                            className="mt-1 block w-full input-style"
-                            disabled={true} // Made disabled for all users
-                        >
-                            {/* Conditional option for admin designation, otherwise map all designations */}
-                            {currentUser.id === ADMIN_USER_ID ? (
-                                <option value="ADMINISTRATOR">Administrator</option>
-                            ) : (
-                                DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)
-                            )}
-                        </select>
-                    </div>
-
                     {renderInputField("contactNumber", "Contact Number", formData.contactNumber, handleInputChange, false, 'tel', false, "\\d{10}", 10)}
-                </div>
+                </fieldset>
+
+                <fieldset className="space-y-4 pt-4">
+                    <legend className="text-base font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2 mb-2">Organizational Assignment</legend>
+                    {renderReadOnlyField("Designation", formData.designation)}
+                    {renderReadOnlyField("Branch", currentUser.branchName)}
+                    {renderReadOnlyField("District", currentUser.districtName)}
+                    {renderReadOnlyField("Region", currentUser.region)}
+                    {renderReadOnlyField("Zone", currentUser.zone)}
+                </fieldset>
+
+                <fieldset className="space-y-4 pt-4">
+                    <legend className="text-base font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2 mb-2">Management & Reporting</legend>
+                    {renderReadOnlyListField("Managed Zones", currentUser.managedZones)}
+                    {renderReadOnlyListField("Managed Branches", currentUser.managedBranches)}
+                    {renderReadOnlyField("Reports To", managerName)}
+                </fieldset>
 
                 <div className="pt-5 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex justify-end">

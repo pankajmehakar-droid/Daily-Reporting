@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Branch, BRANCH_NAMES, StaffMember, User, Zone, Region, District, Designation } from '../types'; // Import Zone, Region, District types
 import { getBranches, addBranch, updateBranch, removeBranch, addMultipleBranches, BranchDeletionError, updateStaff, removeAllBranches, getZones, getRegions, getDistricts, getAllStaff, getStaffByBranch } from '../services/dataService'; // Import new org unit getters, getAllStaff, getStaffByBranch
@@ -165,10 +164,11 @@ export const BranchManagementPage: React.FC<{ currentUser: User }> = ({ currentU
                 getRegions(),
                 getDistricts(),
             ]);
-            if (!isMounted.current) return;
-            setAllZones(zones);
-            setAllRegions(regions);
-            setAllDistricts(districts);
+            if (isMounted.current) {
+                setAllZones(zones);
+                setAllRegions(regions);
+                setAllDistricts(districts);
+            }
         } catch (err) {
             if (isMounted.current) {
                 setNotification({ message: err instanceof Error ? err.message : 'Failed to fetch organizational units.', type: 'error' });

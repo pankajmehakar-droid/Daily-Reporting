@@ -1,12 +1,10 @@
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { User, ParsedCsvData, StaffMember, Kra, Demand, PROJECTION_DEMAND_METRIC_NAMES, DemandRunRateResult, ProductMetric, CsvRecord } from '../types';
-import { getStaffByBranch, getKrasForStaff, getDemandsForStaff, calculateDemandRunRateForSingleEntity, getProductMetrics } from '../services/dataService';
+import { User, ParsedCsvData, StaffMember, Target, Demand, PROJECTION_DEMAND_METRIC_NAMES, DailyRunRateResult, ProductMetric, CsvRecord } from '../types';
+import { getStaffByBranch, getTargetsForStaff, getDemandsForStaff, calculateDailyRunRateForSingleEntity, getProductMetrics } from '../services/dataService';
 import CollapsibleSection from '../components/CollapsibleSection';
 import { CheckCircleIcon, FileTextIcon, LoaderIcon, TargetIcon, AlertTriangleIcon, DollarSignIcon, HashIcon, CalendarIcon } from '../components/icons';
 import { getMonthString, getTodayDateYYYYMMDD, getKraStatus, formatDisplayDate } from '../utils/dateHelpers';
 import SummaryCard from '../components/SummaryCard';
-// Fix: Import the specific BarChart component from its new dedicated file
 import RunRateBarChart from '../components/RunRateBarChart';
 
 const formatCurrency = (value: number) => {
@@ -16,9 +14,9 @@ const formatCurrency = (value: number) => {
     }).format(value);
 };
 
-// Reusable KraTargets component
-const KraTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({ user, productMetrics }) => {
-    const [kras, setKras] = useState<Kra[]>([]);
+// Reusable MonthlyTargets component
+const MonthlyTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({ user, productMetrics }) => {
+    const [targets, setTargets] = useState<Target[]>([]);
     const [loading, setLoading] = useState(true);
 
     const isMounted = useRef(false);
@@ -30,18 +28,18 @@ const KraTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({
       };
     }, []);
 
-    const fetchKras = useCallback(async () => {
+    const fetchTargets = useCallback(async () => {
         if (!user.employeeCode) return;
         setLoading(true);
         try {
-            // Fetch only 'monthly' KRA targets for the current month
+            // Fetch only 'monthly' targets for the current month
             const currentMonth = getMonthString();
-            const monthlyKras = await getKrasForStaff(user.employeeCode, 'monthly', currentMonth);
+            const monthlyTargets = await getTargetsForStaff(user.employeeCode, 'monthly', currentMonth);
             if (isMounted.current) {
-                setKras(monthlyKras);
+                setTargets(monthlyTargets);
             }
         } catch (e) {
-            console.error("Failed to fetch KRA data", e);
+            console.error("Failed to fetch target data", e);
         } finally {
             if (isMounted.current) {
                 setLoading(false);
@@ -50,66 +48,66 @@ const KraTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({
     }, [user.employeeCode, isMounted]);
 
     useEffect(() => {
-        fetchKras();
-    }, [fetchKras]);
+        fetchTargets();
+    }, [fetchTargets]);
 
-    const { totalTargetAmount, totalTargetAccount, groupedKras } = useMemo(() => {
+    const { totalTargetAmount, totalTargetAccount, groupedTargets } = useMemo(() => {
         let totalAmount = 0;
         let totalAccount = 0;
         
-        const amountKras: Kra[] = [];
-        const accountKras: Kra[] = [];
-        const otherKras: Kra[] = [];
+        const amountTargets: Target[] = [];
+        const accountTargets: Target[] = [];
+        const otherTargets: Target[] = [];
 
-        kras.forEach(kra => {
-            const metricDef = productMetrics.find(pm => pm.name === kra.metric);
+        targets.forEach(target => {
+            const metricDef = productMetrics.find(pm => pm.name === target.metric);
             if (metricDef) {
                 if (metricDef.type === 'Amount') {
-                    amountKras.push(kra);
+                    amountTargets.push(target);
                     if (metricDef.name !== 'GRAND TOTAL AMT') {
-                        totalAmount += kra.target;
+                        totalAmount += target.target;
                     }
                 } else if (metricDef.type === 'Account') {
-                    accountKras.push(kra);
+                    accountTargets.push(target);
                     if (metricDef.name !== 'GRAND TOTAL AC' && metricDef.name !== 'NEW-SS/AGNT') {
-                        totalAccount += kra.target;
+                        totalAccount += target.target;
                     }
                 } else {
-                    otherKras.push(kra);
+                    otherTargets.push(target);
                     if (metricDef.name === 'NEW-SS/AGNT') { // Special handling for NEW-SS/AGNT
-                        totalAccount += kra.target;
+                        totalAccount += target.target;
                     }
                 }
             }
         });
 
         // Use defined grand totals if present
-        const grandTotalAmtKra = kras.find(k => k.metric === 'GRAND TOTAL AMT');
-        if (grandTotalAmtKra) {
-            totalAmount = grandTotalAmtKra.target;
+        const grandTotalAmtTarget = targets.find(k => k.metric === 'GRAND TOTAL AMT');
+        if (grandTotalAmtTarget) {
+            totalAmount = grandTotalAmtTarget.target;
         }
-        const grandTotalAcKra = kras.find(k => k.metric === 'GRAND TOTAL AC');
-        if (grandTotalAcKra) {
-            totalAccount = grandTotalAcKra.target;
+        const grandTotalAcTarget = targets.find(k => k.metric === 'GRAND TOTAL AC');
+        if (grandTotalAcTarget) {
+            totalAccount = grandTotalAcTarget.target;
         }
 
-        amountKras.sort((a, b) => a.metric.localeCompare(b.metric));
-        accountKras.sort((a, b) => a.metric.localeCompare(b.metric));
-        otherKras.sort((a, b) => a.metric.localeCompare(b.metric));
+        amountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        accountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        otherTargets.sort((a, b) => a.metric.localeCompare(b.metric));
 
         return {
             totalTargetAmount: totalAmount,
             totalTargetAccount: totalAccount,
-            groupedKras: { amount: amountKras, account: accountKras, other: otherKras },
+            groupedTargets: { amount: amountTargets, account: accountTargets, other: otherTargets },
         };
-    }, [kras, productMetrics]);
+    }, [targets, productMetrics]);
 
 
     return (
-        <CollapsibleSection title="This Month's KRA Targets" icon={TargetIcon}>
+        <CollapsibleSection title="This Month's Targets" icon={TargetIcon}>
              {loading ? (
                 <div className="flex justify-center items-center py-8"><LoaderIcon /></div>
-            ) : kras.length > 0 ? (
+            ) : targets.length > 0 ? (
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <SummaryCard 
@@ -135,41 +133,41 @@ const KraTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({
                                 </tr>
                             </thead>
                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {groupedKras.amount.length > 0 && (
+                                {groupedTargets.amount.length > 0 && (
                                     <tr><td colSpan={3} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Amount Targets</td></tr>
                                 )}
-                                {groupedKras.amount.map(kra => {
-                                    const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                {groupedTargets.amount.map(target => {
+                                    const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                     return (
-                                        <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{kra.metric}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
+                                        <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{target.metric}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
                                             <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                         </tr>
                                     );
                                 })}
-                                {groupedKras.account.length > 0 && (
+                                {groupedTargets.account.length > 0 && (
                                     <tr><td colSpan={3} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Account Targets</td></tr>
                                 )}
-                                {groupedKras.account.map(kra => {
-                                    const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                {groupedTargets.account.map(target => {
+                                    const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                     return (
-                                        <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{kra.metric}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
+                                        <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{target.metric}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
                                             <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                         </tr>
                                     );
                                 })}
-                                {groupedKras.other.length > 0 && (
+                                {groupedTargets.other.length > 0 && (
                                     <tr><td colSpan={3} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Other Targets</td></tr>
                                 )}
-                                {groupedKras.other.map(kra => {
-                                    const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                {groupedTargets.other.map(target => {
+                                    const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                     return (
-                                        <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{kra.metric}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
+                                        <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200">{target.metric}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
                                             <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                         </tr>
                                     );
@@ -179,7 +177,7 @@ const KraTargets: React.FC<{ user: User; productMetrics: ProductMetric[] }> = ({
                     </div>
                 </div>
             ) : (
-                <p className="text-center text-gray-500 dark:text-gray-400 py-8">No KRA targets have been set for you this month.</p>
+                <p className="text-center text-gray-500 dark:text-gray-400 py-8">No targets have been set for you this month.</p>
             )}
         </CollapsibleSection>
     );
@@ -277,8 +275,8 @@ export const ViewTodaysDemandPage: React.FC<ViewTodaysDemandPageProps> = ({ user
     const [loadingDemands, setLoadingDemands] = useState(true);
     const [loadingRunRate, setLoadingRunRate] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [demandRunRate, setDemandRunRate] = useState<DemandRunRateResult | null>(null);
-    const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]); // New state for product metrics
+    const [demandRunRate, setDemandRunRate] = useState<DailyRunRateResult | null>(null);
+    const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
 
     const isMounted = useRef(false);
 
@@ -302,13 +300,12 @@ export const ViewTodaysDemandPage: React.FC<ViewTodaysDemandPageProps> = ({ user
                 setProductMetrics(fetchedMetrics);
             }
 
-            // Calculate demand run rate
             const achievementRecords = data?.records as CsvRecord[] || [];
             if (user.employeeCode && achievementRecords.length > 0) {
                 const currentMonth = getMonthString();
-                const runRateResult = await calculateDemandRunRateForSingleEntity({
+                const runRateResult = await calculateDailyRunRateForSingleEntity({
                     entityId: user.employeeCode,
-                    isBranch: false, // This page is always for a single staff member
+                    isBranch: false,
                     currentMonth: currentMonth,
                     achievementRecords: achievementRecords,
                 });
@@ -353,12 +350,12 @@ export const ViewTodaysDemandPage: React.FC<ViewTodaysDemandPageProps> = ({ user
         <div className="max-w-4xl mx-auto space-y-6">
             <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Today's Demand for {user.staffName}</h2>
 
-            <KraTargets user={user} productMetrics={productMetrics} />
+            <MonthlyTargets user={user} productMetrics={productMetrics} />
 
             {loadingRunRate ? (
                 <div className="flex justify-center items-center py-8"><LoaderIcon /></div>
             ) : demandRunRate && (demandRunRate.monthlyTargetAmount > 0 || demandRunRate.monthlyTargetAccount > 0) ? (
-                <CollapsibleSection title="Demand Run Rate" icon={CalendarIcon} defaultOpen>
+                <CollapsibleSection title="Daily Run Rate" icon={CalendarIcon} defaultOpen>
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <SummaryCard
@@ -408,9 +405,9 @@ export const ViewTodaysDemandPage: React.FC<ViewTodaysDemandPageProps> = ({ user
                     </div>
                 </CollapsibleSection>
             ) : (
-                <CollapsibleSection title="Demand Run Rate" icon={CalendarIcon}>
+                <CollapsibleSection title="Daily Run Rate" icon={CalendarIcon}>
                     <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-                        No targets or achievement data found for {currentMonthString} to calculate demand daily run rate.
+                        No targets or achievement data found for {currentMonthString} to calculate daily run rate.
                     </p>
                 </CollapsibleSection>
             )}
@@ -444,7 +441,9 @@ export const ViewTodaysDemandPage: React.FC<ViewTodaysDemandPageProps> = ({ user
                         </table>
                     </div>
                 ) : (
-                    <p className="text-center text-gray-500 dark:text-gray-400 py-8">No demand data found for today.</p>
+                    <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                        No demand has been generated for you today.
+                    </p>
                 )}
             </CollapsibleSection>
         </div>

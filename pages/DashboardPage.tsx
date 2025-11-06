@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { User, ParsedCsvData, CsvRecord, MtdData, Kra, ProductMetric, DailyAchievementRecord, StaffMember, Branch, Projection, Demand, BranchTarget, DetailedMonthlyTargets } from '../types';
+import { GoogleGenAI } from "@google/genai";
+import { User, ParsedCsvData, CsvRecord, MtdData, Target, ProductMetric, DailyAchievementRecord, StaffMember, Branch, Projection, Demand, BranchTarget, DetailedMonthlyTargets, Highlight, DailyRunRateResult, ChartDataPoint } from '../types';
 import { parseCsvData } from '../services/csvParser';
 import { csvData } from '../data';
-import { getStaffData, getBranches, getAllKras, getAllProjections, getAllDemands, getAllBranchTargets, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, calculateDemandRunRateForUserScope, getDetailedMonthlyTargetsForUserScope, getRecursiveSubordinateInfo } from '../services/dataService'; // Added getKrasForStaff, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, and new global getters
+import { getStaffData, getBranches, getAllTargets, getAllProjections, getAllDemands, getAllBranchTargets, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, calculateDailyRunRateForUserScope, getDetailedMonthlyTargetsForUserScope, getRecursiveSubordinateInfo, getUserScope, getAllStaff, getHighlights, removeHighlight } from '../services/dataService'; // Added getTargetsForStaff, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, and new global getters
 import { login, MOCK_PASSWORDS } from '../services/authService';
-import { getMonthString, convertYYYYMMDDtoDDMMYYYY, getTodayDateYYYYMMDD } from '../utils/dateHelpers'; // Import from new utility
+import { getMonthString, convertYYYYMMDDtoDDMMYYYY, getTodayDateYYYYMMDD, getYearString, convertDDMMYYYYtoYYYYMMDD } from '../utils/dateHelpers'; // Import from new utility
 
 
 import Header from '../components/Header';
@@ -23,27 +24,26 @@ import ProjectionReportPage from './ProjectionReportPage'; // New Import
 import ViewTodaysSubmittedReportPage from './ViewTodaysSubmittedReportPage'; // New Import
 import SettingsPage from './SettingsPage';
 import { BranchManagementPage } from './BranchManagementPage'; // FIX: Changed import to named export
-// FIX: Changed import to named export for StaffManagementPage
-import { StaffManagementPage } from './StaffManagementPage';
-// FIX: Corrected import of KraMappingPage to be a default export
-import { KraMappingPage } from './KraMappingPage'; // FIX: Changed import to named export
+// FIX: Corrected import of TargetMappingPage to be a named export from the renamed component
+import { TargetMappingPage } from './KraMappingPage';
 import ProductSettingsPage from './ProductSettingsPage';
 // FIX: Changed import to named export for ManagerAssignmentsPage
 import { ManagerAssignmentsPage } from './ManagerAssignmentsPage';
 import StaffAssignmentsPage from './StaffAssignmentsPage';
 import ProfileSettingsPage from './ProfileSettingsPage'; // New Import
 import BranchTargetMappingPage from './BranchTargetMappingPage'; // New Import
-import ZoneManagementPage from './ZoneManagementPage'; // New Import
-import RegionManagementPage from './RegionManagementPage'; // CORRECTED PATH
-import DistrictManagementPage from './DistrictManagementPage'; // CORRECTED PATH
+import OrganizationManagementPage from './OrganizationManagementPage'; // New Import
 import { UserManagementPage } from './UserManagementPage'; // FIX: Changed import to named export
-import DesignationKraSettingsPage from './DesignationKraSettingsPage'; // New page
+import ProductMappingPage from './DesignationKraSettingsPage'; // New page
 import TargetAchievementAnalytics from '../components/TargetAchievementAnalytics'; // New component
+import HighlightUploadModal from '../components/HighlightUploadModal'; // New Import
+import { UploadIcon, TrashIcon, DollarSignIcon, UsersIcon, BotIcon, LoaderIcon } from '../components/icons';
 
 // FIX: Declare XLSX from the global scope (assuming it's loaded via script tag in index.html)
 declare const XLSX: any;
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'staffmanagement' | 'kramapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'zonemanagement' | 'regionmanagement' | 'districtmanagement' | 'designationkrasettings';
+type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'targetmapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'organizationmanagement' | 'productmapping';
 
 
 interface DashboardPageProps {
@@ -52,36 +52,227 @@ interface DashboardPageProps {
   onUserUpdate: (user: User) => void;
 }
 
-// Dashboard content component - MOVED OUTSIDE DashboardPage
-interface DashboardContentProps {
-    currentUser: User;
-    parsedCsvData: ParsedCsvData | null; // Renamed to avoid collision with prop 'data'
-    mtdData: DetailedMonthlyTargets;
-    loading: boolean; // Added loading prop
-    error: string | null; // Added error prop
-    refreshDashboardData: () => void; // Added refresh callback
-}
+// Helper for formatting currency
+const formatCurrency = (value: number) => {
+  if (isNaN(value)) return '₹ 0';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+};
 
-const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsedCsvData, mtdData, loading: isDashboardLoading, error }) => {
-    // Helper for formatting currency
-    const formatCurrency = (value: number) => {
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(value);
-    };
-  
-    const formatNumber = (value: number) => {
-      return new Intl.NumberFormat('en-IN', {
-        maximumFractionDigits: 0,
-      }).format(value);
+const formatNumber = (value: number) => {
+  if (isNaN(value)) return '0';
+  return new Intl.NumberFormat('en-IN', {
+    maximumFractionDigits: 0,
+  }).format(value);
+};
+
+// --- NEW: User-specific Dashboard Content ---
+const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedCsvData | null }> = ({ currentUser, parsedCsvData }) => {
+    const [runRate, setRunRate] = useState<DailyRunRateResult | null>(null);
+    const [loadingRunRate, setLoadingRunRate] = useState(true);
+    const [aiTip, setAiTip] = useState('');
+    const [loadingAiTip, setLoadingAiTip] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+    const isMounted = useRef(false);
+    
+    useEffect(() => {
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
+
+    const fetchRunRate = useCallback(async () => {
+        if (!parsedCsvData?.records || !currentUser.employeeCode) {
+            setLoadingRunRate(false);
+            return;
+        }
+        setLoadingRunRate(true);
+        try {
+            const result = await calculateDailyRunRateForUserScope(currentUser, getMonthString(), parsedCsvData.records);
+            if (isMounted.current) {
+                setRunRate(result);
+            }
+        } catch (err) {
+            console.error("Failed to fetch run rate for user dashboard", err);
+        } finally {
+            if (isMounted.current) {
+                setLoadingRunRate(false);
+            }
+        }
+    }, [currentUser, parsedCsvData]);
+    
+    useEffect(() => {
+        fetchRunRate();
+    }, [fetchRunRate]);
+
+    const generateAiTip = useCallback(async () => {
+        if (!runRate || runRate.remainingTargetAmount <= 0) return;
+        setLoadingAiTip(true);
+        setAiError(null);
+        try {
+            const prompt = `You are a helpful sales coach for a bank. A user has these remaining targets for the month: ${formatCurrency(runRate.remainingTargetAmount)} amount, and ${runRate.remainingTargetAccount.toFixed(1)} accounts. There are ${runRate.daysRemainingInMonth} days left in the month. Give them a concise, positive, and actionable tip (2-3 sentences) for today to help them meet their goal. Address them directly.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+            });
+
+            if (isMounted.current) {
+                setAiTip(response.text);
+            }
+        } catch (err) {
+            if (isMounted.current) {
+                setAiError('Could not generate AI tip.');
+            }
+        } finally {
+            if (isMounted.current) {
+                setLoadingAiTip(false);
+            }
+        }
+    }, [runRate, isMounted]);
+
+    useEffect(() => {
+        if (runRate) {
+            generateAiTip();
+        }
+    }, [runRate, generateAiTip]);
+
+    const dailyPerformanceChartData = useMemo(() => {
+        if (!parsedCsvData?.records) return [];
+
+        const currentMonthStr = getMonthString();
+        const currentUserRecords = parsedCsvData.records.filter(r => {
+            const staffName = (r['STAFF NAME'] as string || '').trim().toUpperCase();
+            return staffName === currentUser.staffName.toUpperCase();
+        });
+
+        const dailyTotals: { [date: string]: number } = {}; // date is DD/MM/YYYY
+
+        currentUserRecords.forEach(record => {
+            const dateStr = record['DATE'] as string; // dd/mm/yyyy
+            if (!dateStr || !/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return;
+
+            const [day, month, year] = dateStr.split('/').map(Number);
+            const recordMonthStr = `${year}-${String(month).padStart(2, '0')}`;
+
+            if (recordMonthStr === currentMonthStr) {
+                const amount = record['GRAND TOTAL AMT'] as number;
+                if (dateStr && typeof amount === 'number') {
+                    dailyTotals[dateStr] = (dailyTotals[dateStr] || 0) + amount;
+                }
+            }
+        });
+
+        return Object.entries(dailyTotals)
+            .map(([dateDDMMYYYY, amount]) => ({
+                label: dateDDMMYYYY.substring(0, 5), // "DD/MM"
+                value: amount,
+                originalLabel: dateDDMMYYYY,
+            }))
+            .sort((a, b) => {
+                const dateA = new Date(convertDDMMYYYYtoYYYYMMDD(a.originalLabel!)).getTime();
+                const dateB = new Date(convertDDMMYYYYtoYYYYMMDD(b.originalLabel!)).getTime();
+                return dateA - dateB;
+            });
+    }, [parsedCsvData, currentUser.staffName]);
+
+    const AchievementProgressBar = ({ title, achieved, target }: { title: string; achieved: number; target: number }) => {
+        const percentage = target > 0 ? (achieved / target) * 100 : (achieved > 0 ? 100 : 0);
+        const getProgressBarColor = (p: number) => {
+            if (p >= 100) return 'bg-green-500';
+            if (p >= 75) return 'bg-yellow-500';
+            if (p >= 50) return 'bg-orange-500';
+            return 'bg-red-500';
+        };
+
+        return (
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</h4>
+                <div className="flex justify-between items-baseline mt-1">
+                    <span className="text-lg font-bold text-gray-800 dark:text-gray-100">{formatCurrency(achieved)}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">/ {formatCurrency(target)}</span>
+                </div>
+                <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div className={`${getProgressBarColor(percentage)} h-2.5 rounded-full`} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
+                </div>
+                <p className="text-right text-sm font-semibold text-gray-700 dark:text-gray-200 mt-1">{percentage.toFixed(1)}%</p>
+            </div>
+        );
     };
 
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Dashboard</h2>
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Welcome, {currentUser.staffName}!</h2>
+
+            {loadingRunRate ? (
+                <div className="flex justify-center py-8"><LoaderIcon /></div>
+            ) : runRate ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <AchievementProgressBar title="MTD Amount Achievement" achieved={runRate.mtdAchievementAmount} target={runRate.monthlyTargetAmount} />
+                    <AchievementProgressBar title="MTD Account Achievement" achieved={runRate.mtdAchievementAccount} target={runRate.monthlyTargetAccount} />
+                </div>
+            ) : (
+                <p className="text-center text-gray-500 dark:text-gray-400 py-4">
+                    Monthly targets not set. Achievement progress cannot be displayed.
+                </p>
+            )}
+
+            {(loadingAiTip || aiTip || aiError) && (
+                 <div className="bg-indigo-50 dark:bg-gray-800 p-4 rounded-xl shadow-md flex items-start space-x-4">
+                    <div className="flex-shrink-0 p-3 rounded-full bg-indigo-100 dark:bg-gray-700 text-indigo-500 dark:text-indigo-400">
+                        <BotIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">Focus for Today</p>
+                        {loadingAiTip && <div className="mt-2 flex items-center gap-2"><LoaderIcon className="w-4 h-4" /><span className="text-sm text-gray-500">Generating tip...</span></div>}
+                        {aiError && <p className="mt-1 text-sm text-red-500">{aiError}</p>}
+                        {aiTip && <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{aiTip}</p>}
+                    </div>
+                </div>
+            )}
+            
+            <TargetAchievementAnalytics data={parsedCsvData} user={currentUser} />
+
+            {dailyPerformanceChartData.length > 0 && (
+                <BarChart
+                    title="Your Daily Performance This Month (Amount)"
+                    data={dailyPerformanceChartData}
+                />
+            )}
+        </div>
+    );
+};
+
+// Dashboard content component - MOVED OUTSIDE DashboardPage
+interface DashboardContentProps {
+    currentUser: User;
+    parsedCsvData: ParsedCsvData | null; // Renamed to avoid collision with prop 'data'
+    mtdAchievements: DetailedMonthlyTargets;
+    ytdAchievements: DetailedMonthlyTargets; // New prop for YTD data
+    highlights: Highlight[];
+    loading: boolean; // Added loading prop
+    error: string | null; // Added error prop
+    refreshDashboardData: () => void; // Added refresh callback
+    onUploadHighlightClick: () => void;
+    onDeleteHighlight: (id: string) => void;
+}
+
+const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsedCsvData, mtdAchievements, ytdAchievements, highlights, loading: isDashboardLoading, error, onUploadHighlightClick, onDeleteHighlight }) => {
+    const latestHighlight = highlights && highlights.length > 0 ? highlights[0] : null;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Dashboard</h2>
+                {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+                    <button onClick={onUploadHighlightClick} className="btn btn-secondary flex items-center gap-2">
+                        <UploadIcon className="w-5 h-5" /> Upload Highlight
+                    </button>
+                )}
+            </div>
             
             {error && (
                 <div className="bg-red-100 dark:bg-red-900/30 border-l-4 border-red-500 text-red-700 dark:text-red-300 p-4 rounded-md flex items-start space-x-3" role="alert">
@@ -96,31 +287,53 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsed
                 </div>
             ) : (
                 <>
-                    {/* New: MTD Summary Cards */}
+                    {/* Highlight Display */}
+                    {latestHighlight && (
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden relative">
+                            <div className="p-4">
+                                <h3 className="text-lg font-semibold text-indigo-600 dark:text-indigo-400 mb-2">Latest Highlight</h3>
+                                <img src={latestHighlight.imageUrl} alt="Highlight" className="w-full h-auto max-h-96 object-contain rounded-md" />
+                                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    Uploaded by {latestHighlight.uploadedBy} on {new Date(latestHighlight.timestamp).toLocaleDateString()}
+                                </div>
+                            </div>
+                            {(currentUser.role === 'admin' || currentUser.staffName === latestHighlight.uploadedBy) && (
+                                <button
+                                    onClick={() => onDeleteHighlight(latestHighlight.id)}
+                                    className="absolute top-2 right-2 p-1.5 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
+                                    aria-label="Delete highlight"
+                                >
+                                    <TrashIcon className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* New: MTD and YTD Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <SummaryCard 
                             title="MTD Total Amount"
-                            value={formatCurrency(mtdData.totalAmount)} 
-                            icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c1.621 0 3.242.825 4.148 2.302A.987.987 0 0017 11v1a1 1 0 001 1h1a1 1 0 001-1v-1a4 4 0 00-4-4h-2a4 4 0 00-4 4v1a1 1 0 001 1h1a1 1 0 001-1v-1a.987.987 0 00.852-.698A4.015 4.015 0 0012 8zM3 21h18M3 11V5a2 2 0 012-2h14a2 2 0 012 2v6"/></svg>} 
+                            value={formatCurrency(mtdAchievements.totalAmount)} 
+                            icon={<DollarSignIcon className="h-6 w-6" />} 
                             color="text-green-500" 
                         />
                         <SummaryCard 
                             title="MTD Total Accounts"
-                            value={formatNumber(mtdData.totalAc)} 
-                            icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354l-7.793 7.793a1 1 0 00-.293.707V20a2 2 0 002 2h4a2 2 0 002-2v-6h4v6a2 2 0 002 2h4a2 4 0 002-2v-7.146a1 1 0 00-.293-.707L12 4.354zM20 12h-4v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2H4"/></svg>} 
+                            value={formatNumber(mtdAchievements.totalAc)} 
+                            icon={<UsersIcon className="h-6 w-6" />} 
                             color="text-blue-500" 
                         />
                         <SummaryCard 
-                            title="MTD DDS Accounts"
-                            value={formatNumber(mtdData.ddsAc)} 
-                            icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>} 
-                            color="text-orange-500" 
+                            title="YTD Total Amount"
+                            value={formatCurrency(ytdAchievements.totalAmount)} 
+                            icon={<DollarSignIcon className="h-6 w-6" />} 
+                            color="text-purple-500" 
                         />
                         <SummaryCard 
-                            title="MTD FD Accounts"
-                            value={formatNumber(mtdData.fdAc)} 
-                            icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 13l-3 3m0 0l-3-3m3 3V8m0 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>} 
-                            color="text-purple-500" 
+                            title="YTD Total Accounts"
+                            value={formatNumber(ytdAchievements.totalAc)} 
+                            icon={<UsersIcon className="h-6 w-6" />} 
+                            color="text-orange-500" 
                         />
                     </div>
                     {/* Target Achievement Analytics */}
@@ -149,12 +362,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mtdData, setMtdData] = useState<DetailedMonthlyTargets>({
+  const [mtdAchievements, setMtdAchievements] = useState<DetailedMonthlyTargets>({
       totalAmount: 0,
       totalAc: 0,
       ddsAc: 0,
       fdAc: 0,
   });
+   const [ytdAchievements, setYtdAchievements] = useState<DetailedMonthlyTargets>({
+      totalAmount: 0,
+      totalAc: 0,
+      ddsAc: 0,
+      fdAc: 0,
+  });
+  const [isHighlightModalOpen, setIsHighlightModalOpen] = useState(false);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
 
 
   const isMounted = useRef(false);
@@ -227,15 +448,75 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
     setLoading(true); // Indicate loading for dashboard data refresh
     setError(null); // Clear previous errors
     const currentMonth = getMonthString();
+    const currentYear = getYearString();
+
     try {
-        const allRecords = await getDailyAchievementRecords();
-        const parsedAllRecords = transformDailyAchievementsToParsedCsvData(allRecords);
+        const [allRecords, allStaff, highlightsData] = await Promise.all([
+          getDailyAchievementRecords(),
+          getAllStaff(),
+          getHighlights()
+        ]);
+
+        if (!isMounted.current) return;
+        setHighlights(highlightsData);
+
+        // 1. Get user scope
+        const { employeeCodes, branchNames } = await getUserScope(user);
+
+        // 2. Filter records based on a scope that's appropriate for the user's role dashboard
+        let scopedRecords;
+        if (user.role === 'user') {
+            // For a 'user', the dashboard summary should only show their personal achievements.
+            scopedRecords = allRecords.filter(record => {
+                const staffMember = allStaff.find(s => s.employeeName === record['STAFF NAME']);
+                return staffMember?.employeeCode === user.employeeCode;
+            });
+        } else {
+            // For 'manager' and 'admin', use the broader scope from getUserScope.
+            scopedRecords = allRecords.filter(record => {
+                const staffMember = allStaff.find(s => s.employeeName === record['STAFF NAME']);
+                const staffCode = staffMember?.employeeCode;
+                const branchName = record['BRANCH NAME'];
+                return (staffCode && employeeCodes.has(staffCode)) || (branchName && branchNames.has(branchName));
+            });
+        }
         
-        const detailedMtd = await getDetailedMonthlyTargetsForUserScope(user, currentMonth);
+        // 3. Calculate MTD achievements from scoped records
+        const mtdScopedRecords = scopedRecords.filter(record => record.date.startsWith(currentMonth));
+        let mtdTotalAmount = 0;
+        let mtdTotalAc = 0;
+        let mtdDdsAc = 0;
+        let mtdFdAc = 0;
+        mtdScopedRecords.forEach(record => {
+            mtdTotalAmount += record['GRAND TOTAL AMT'];
+            mtdTotalAc += record['GRAND TOTAL AC'];
+            mtdDdsAc += record['DDS AC'];
+            mtdFdAc += record['FD AC'];
+        });
+        const mtdAch: DetailedMonthlyTargets = { totalAmount: mtdTotalAmount, totalAc: mtdTotalAc, ddsAc: mtdDdsAc, fdAc: mtdFdAc };
+
+        // 4. Calculate YTD achievements from scoped records
+        const ytdScopedRecords = scopedRecords.filter(record => record.date.startsWith(currentYear));
+        let ytdTotalAmount = 0;
+        let ytdTotalAc = 0;
+        let ytdDdsAc = 0;
+        let ytdFdAc = 0;
+        ytdScopedRecords.forEach(record => {
+            ytdTotalAmount += record['GRAND TOTAL AMT'];
+            ytdTotalAc += record['GRAND TOTAL AC'];
+            ytdDdsAc += record['DDS AC'];
+            ytdFdAc += record['FD AC'];
+        });
+        const ytdAch: DetailedMonthlyTargets = { totalAmount: ytdTotalAmount, totalAc: ytdTotalAc, ddsAc: ytdDdsAc, fdAc: ytdFdAc };
+        
+
+        // 5. Create parsed data from all scoped records for other components like Analytics
+        const parsedScopedRecords = transformDailyAchievementsToParsedCsvData(scopedRecords);
 
         if (isMounted.current) {
-          setParsedCsvData(parsedAllRecords); // Set the parsed data from actual records for analytics/reports
-          setMtdData(detailedMtd);
+          setParsedCsvData(parsedScopedRecords);
+          setMtdAchievements(mtdAch);
+          setYtdAchievements(ytdAch);
         }
     } catch (err) {
         if (isMounted.current) {
@@ -252,7 +533,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
       refreshDashboardData();
   }, [refreshDashboardData]);
 
-
+  const handleDeleteHighlight = async (id: string) => {
+    try {
+        await removeHighlight(id);
+        if (isMounted.current) {
+            refreshDashboardData(); // Re-fetch all data to update the UI
+        }
+    } catch (err) {
+        if (isMounted.current) {
+            setError(err instanceof Error ? err.message : 'Failed to delete highlight.');
+        }
+    }
+  };
     
   const pagesMap = useMemo(() => {
     const commonProps = { currentUser: user, data: parsedCsvData };
@@ -260,7 +552,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
     const dailyTaskProps = { user: user, onDataUpdate: refreshDashboardData, onNavigate: handleNavigate }; // Pass refresh callback and onNavigate
 
     return {
-      dashboard: <DashboardContent {...commonProps} parsedCsvData={parsedCsvData} mtdData={mtdData} loading={loading} error={error} refreshDashboardData={refreshDashboardData} />,
+      dashboard: user.role === 'user'
+        ? <UserDashboardContent currentUser={user} parsedCsvData={parsedCsvData} />
+        : <DashboardContent {...commonProps} parsedCsvData={parsedCsvData} mtdAchievements={mtdAchievements} ytdAchievements={ytdAchievements} highlights={highlights} loading={loading} error={error} refreshDashboardData={refreshDashboardData} onUploadHighlightClick={() => setIsHighlightModalOpen(true)} onDeleteHighlight={handleDeleteHighlight} />,
       dailytask_achievement: <SubmitDailyAchievementPage {...dailyTaskProps} />,
       dailytask_projection: <SubmitProjectionPage {...dailyTaskProps} />,
       dailytask_demand: <ViewTodaysDemandPage user={user} data={parsedCsvData} />,
@@ -285,18 +579,15 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
       }} />,
       usermanagement: <UserManagementPage currentUser={user} />,
       branchmanagement: <BranchManagementPage currentUser={user} />,
-      staffmanagement: <StaffManagementPage manager={user} />,
-      kramapping: <KraMappingPage currentUser={user} />,
+      targetmapping: <TargetMappingPage currentUser={user} />,
       productsettings: <ProductSettingsPage currentUser={user} onMetricsUpdated={refreshDashboardData} />,
       managerassignments: <ManagerAssignmentsPage currentUser={user} />,
       staffassignments: <StaffAssignmentsPage currentUser={user} />,
       admin_target_branch: <BranchTargetMappingPage currentUser={user} />,
-      zonemanagement: <ZoneManagementPage currentUser={user} />,
-      regionmanagement: <RegionManagementPage currentUser={user} />,
-      districtmanagement: <DistrictManagementPage currentUser={user} />,
-      designationkrasettings: <DesignationKraSettingsPage currentUser={user} />, // New page
+      organizationmanagement: <OrganizationManagementPage currentUser={user} />,
+      productmapping: <ProductMappingPage currentUser={user} />, // New page
     };
-  }, [user, parsedCsvData, mtdData, onLogout, onUserUpdate, refreshDashboardData, loading, error, handleNavigate]);
+  }, [user, parsedCsvData, mtdAchievements, ytdAchievements, onLogout, onUserUpdate, refreshDashboardData, loading, error, handleNavigate, highlights, handleDeleteHighlight]);
 
   // Main content display based on activePage
   const renderPage = () => {
@@ -328,13 +619,24 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
           user={user} 
           onLogout={onLogout} 
           onMenuToggle={handleMenuToggle} 
-          onNavigate={handleNavigate}
+          onNavigate={handleNavigate} 
         />
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 dark:bg-gray-900">
           {renderPage()}
         </main>
       </div>
+
+      {isHighlightModalOpen && (
+        <HighlightUploadModal
+          currentUser={user}
+          onClose={() => setIsHighlightModalOpen(false)}
+          onUploadSuccess={() => {
+            setIsHighlightModalOpen(false);
+            refreshDashboardData(); // Refresh to show the new highlight
+          }}
+        />
+      )}
 
       <FileUploadButton onChange={handleFileUpload} fileName={fileName} user={user} />
     </div>

@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Designation, ProductMetric, DesignationKRA, DESIGNATIONS } from '../types';
-import { getDesignationKras, saveDesignationKra, updateDesignationKra, removeDesignationKra, getProductMetrics } from '../services/dataService';
+import { User, Designation, ProductMetric, DesignationTarget, DESIGNATIONS } from '../types';
+import { getDesignationTargets, saveDesignationTarget, updateDesignationTarget, removeDesignationTarget, getProductMetrics } from '../services/dataService';
 import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, CheckCircleIcon, UsersIcon } from '../components/icons';
 
-interface DesignationKraSettingsPageProps {
+interface ProductMappingPageProps {
   currentUser: User;
 }
 
-const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({ currentUser }) => {
+const ProductMappingPage: React.FC<ProductMappingPageProps> = ({ currentUser }) => {
   // RBAC: Restrict this page to admin users only
   if (currentUser.role !== 'admin') {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Designation KRA Setup</h2>
+        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Product Mapping</h2>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center">
           <p className="text-red-500 dark:text-red-400 font-semibold">
-            You do not have permission to view Designation KRA Setup.
+            You do not have permission to view Product Mapping.
           </p>
           <p className="text-gray-500 dark:text-gray-400 mt-2">
             This page is accessible only to Administrators.
@@ -25,14 +25,14 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     );
   }
 
-  const [designationKras, setDesignationKras] = useState<DesignationKRA[]>([]);
+  const [designationTargets, setDesignationTargets] = useState<DesignationTarget[]>([]);
   const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDesignationKra, setEditingDesignationKra] = useState<DesignationKRA | null>(null);
+  const [editingDesignationTarget, setEditingDesignationTarget] = useState<DesignationTarget | null>(null);
   const [formData, setFormData] = useState<{ designation: Designation | ''; selectedMetricIds: string[] }>({
     designation: '',
     selectedMetricIds: [],
@@ -52,12 +52,12 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     try {
       setLoading(true);
       setError(null);
-      const [dkras, metrics] = await Promise.all([
-        getDesignationKras(),
+      const [dtargets, metrics] = await Promise.all([
+        getDesignationTargets(),
         getProductMetrics(),
       ]);
       if (isMounted.current) {
-        setDesignationKras(dkras);
+        setDesignationTargets(dtargets);
         setProductMetrics(metrics);
       }
     } catch (err) {
@@ -75,19 +75,19 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const openModal = (dkra: DesignationKRA | null = null) => {
+  const openModal = (dtarget: DesignationTarget | null = null) => {
     setError(null);
     setNotification(null);
-    if (dkra) {
-      setEditingDesignationKra(dkra);
+    if (dtarget) {
+      setEditingDesignationTarget(dtarget);
       setFormData({
-        designation: dkra.designation,
-        selectedMetricIds: [...dkra.metricIds],
+        designation: dtarget.designation,
+        selectedMetricIds: [...dtarget.metricIds],
       });
     } else {
-      setEditingDesignationKra(null);
+      setEditingDesignationTarget(null);
       setFormData({
-        designation: (DESIGNATIONS.find(d => !designationKras.some(dk => dk.designation === d)) || '') as Designation, // Pre-select first available designation
+        designation: (DESIGNATIONS.find(d => !designationTargets.some(dt => dt.designation === d)) || '') as Designation, // Pre-select first available designation
         selectedMetricIds: [],
       });
     }
@@ -96,7 +96,7 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setEditingDesignationKra(null);
+    setEditingDesignationTarget(null);
     setFormData({ designation: '', selectedMetricIds: [] });
   };
 
@@ -126,19 +126,19 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     }
 
     try {
-      const payload: Omit<DesignationKRA, 'id'> = {
+      const payload: Omit<DesignationTarget, 'id'> = {
         designation: formData.designation,
         metricIds: formData.selectedMetricIds,
       };
 
-      if (editingDesignationKra) {
-        await updateDesignationKra(editingDesignationKra.id, payload);
+      if (editingDesignationTarget) {
+        await updateDesignationTarget(editingDesignationTarget.id, payload);
         if (!isMounted.current) return;
-        setNotification({ message: `KRA mapping for "${formData.designation}" updated successfully.`, type: 'success' });
+        setNotification({ message: `Product mapping for "${formData.designation}" updated successfully.`, type: 'success' });
       } else {
-        await saveDesignationKra(payload);
+        await saveDesignationTarget(payload);
         if (!isMounted.current) return;
-        setNotification({ message: `KRA mapping for "${formData.designation}" created successfully.`, type: 'success' });
+        setNotification({ message: `Product mapping for "${formData.designation}" created successfully.`, type: 'success' });
       }
       if (isMounted.current) {
         closeModal();
@@ -155,18 +155,18 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     }
   };
 
-  const handleDelete = async (dkra: DesignationKRA) => {
-    if (window.confirm(`Are you sure you want to delete the KRA mapping for "${dkra.designation}"? This action cannot be undone.`)) {
+  const handleDelete = async (dtarget: DesignationTarget) => {
+    if (window.confirm(`Are you sure you want to delete the product mapping for "${dtarget.designation}"? This action cannot be undone.`)) {
       try {
         setLoading(true); // Indicate loading while deleting
         setNotification(null);
-        await removeDesignationKra(dkra.id);
+        await removeDesignationTarget(dtarget.id);
         if (!isMounted.current) return;
-        setNotification({ message: `KRA mapping for "${dkra.designation}" deleted successfully.`, type: 'success' });
+        setNotification({ message: `Product mapping for "${dtarget.designation}" deleted successfully.`, type: 'success' });
         await fetchInitialData(); // Refresh data
       } catch (err) {
         if (isMounted.current) {
-          setNotification({ message: err instanceof Error ? err.message : 'Failed to delete KRA mapping.', type: 'error' });
+          setNotification({ message: err instanceof Error ? err.message : 'Failed to delete product mapping.', type: 'error' });
           setLoading(false); // Stop loading if error
         }
       }
@@ -177,16 +177,16 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
     return metricIds.map(id => productMetrics.find(pm => pm.id === id)?.name || id).join(', ');
   };
 
-  // Filter out designations that already have a KRA mapping
+  // Filter out designations that already have a Target mapping
   const availableDesignations = useMemo(() => {
-    const existingDesignations = new Set(designationKras.map(dkra => dkra.designation));
-    return DESIGNATIONS.filter(d => !existingDesignations.has(d) || (editingDesignationKra && editingDesignationKra.designation === d));
-  }, [designationKras, editingDesignationKra]);
+    const existingDesignations = new Set(designationTargets.map(dtarget => dtarget.designation));
+    return DESIGNATIONS.filter(d => !existingDesignations.has(d) || (editingDesignationTarget && editingDesignationTarget.designation === d));
+  }, [designationTargets, editingDesignationTarget]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Designation KRA Setup</h2>
+        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Product Mapping</h2>
         <button onClick={() => openModal()} className="btn btn-indigo flex items-center gap-2">
           <PlusIcon className="w-5 h-5" /> Add New Mapping
         </button>
@@ -216,20 +216,20 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th className="th-style">Designation</th>
-                  <th className="th-style">Applicable KRA Metrics</th>
+                  <th className="th-style">Applicable Product Metrics</th>
                   <th className="th-style">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {designationKras.length > 0 ? (
-                  designationKras.map(dkra => (
-                    <tr key={dkra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <td className="td-style font-medium">{dkra.designation}</td>
-                      <td className="td-style text-wrap max-w-lg">{getMetricNames(dkra.metricIds)}</td>
+                {designationTargets.length > 0 ? (
+                  designationTargets.map(dtarget => (
+                    <tr key={dtarget.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="td-style font-medium">{dtarget.designation}</td>
+                      <td className="td-style text-wrap max-w-lg">{getMetricNames(dtarget.metricIds)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-3">
-                          <button onClick={() => openModal(dkra)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300" aria-label={`Edit KRA mapping for ${dkra.designation}`}><EditIcon className="w-5 h-5" /></button>
-                          <button onClick={() => handleDelete(dkra)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete KRA mapping for ${dkra.designation}`}><TrashIcon className="w-5 h-5" /></button>
+                          <button onClick={() => openModal(dtarget)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300" aria-label={`Edit product mapping for ${dtarget.designation}`}><EditIcon className="w-5 h-5" /></button>
+                          <button onClick={() => handleDelete(dtarget)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete product mapping for ${dtarget.designation}`}><TrashIcon className="w-5 h-5" /></button>
                         </div>
                       </td>
                     </tr>
@@ -237,7 +237,7 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
                 ) : (
                   <tr>
                     <td colSpan={3} className="text-center py-10 text-gray-500 dark:text-gray-400">
-                      No Designation KRA mappings defined.
+                      No product mappings defined.
                     </td>
                   </tr>
                 )}
@@ -251,7 +251,7 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4" aria-modal="true" role="dialog">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center p-4 border-b dark:border-gray-700">
-              <h3 className="text-lg font-semibold dark:text-gray-100">{editingDesignationKra ? 'Edit Designation KRA Mapping' : 'Add New Designation KRA Mapping'}</h3>
+              <h3 className="text-lg font-semibold dark:text-gray-100">{editingDesignationTarget ? 'Edit Product Mapping' : 'Add New Product Mapping'}</h3>
               <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close modal"><XIcon className="w-6 h-6" /></button>
             </div>
             <form onSubmit={handleSubmit} className="flex-grow flex flex-col overflow-hidden">
@@ -266,7 +266,7 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
                     onChange={handleDesignationChange}
                     required
                     className="input-style w-full"
-                    disabled={!!editingDesignationKra} // Disable if editing an existing mapping
+                    disabled={!!editingDesignationTarget} // Disable if editing an existing mapping
                   >
                     <option value="" disabled>-- Select a Designation --</option>
                     {availableDesignations.map(d => (
@@ -274,7 +274,7 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
                     ))}
                   </select>
                 </div>
-                <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mt-6">Applicable KRA Metrics</h4>
+                <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mt-6">Applicable Product Metrics</h4>
                 <div className="space-y-2 max-h-60 overflow-y-auto p-2 border border-gray-200 dark:border-gray-600 rounded-md">
                   {productMetrics.length > 0 ? (
                     productMetrics.map(metric => (
@@ -311,4 +311,4 @@ const DesignationKraSettingsPage: React.FC<DesignationKraSettingsPageProps> = ({
   );
 };
 
-export default DesignationKraSettingsPage;
+export default ProductMappingPage;

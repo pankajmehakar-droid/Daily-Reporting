@@ -1,18 +1,16 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { ParsedCsvData, CsvRecord, StaffMember, Branch } from '../types';
+import React, { useMemo } from 'react';
+import { ParsedCsvData, CsvRecord } from '../types';
 import CollapsibleSection from '../components/CollapsibleSection';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { AnalyticsIcon, FileDownIcon, CalendarIcon, DollarSignIcon, HashIcon, UsersIcon, OfficeBuildingIcon, SearchIcon, LoaderIcon } from '../components/icons';
-import { getStaffData, getBranches } from '../services/dataService'; // Import necessary data services
+import { AnalyticsIcon, FileDownIcon, CalendarIcon, DollarSignIcon, HashIcon } from '../components/icons';
 import { getMonthString } from '../utils/dateHelpers';
 
 // Declare XLSX from the script tag in index.html
 declare const XLSX: any;
 
-// Declare jsPDF and autoTable from the script tags in index.html
+// Declare jsPDF from the script tags in index.html
 declare const jsPDF: any;
-declare const autoTable: any;
 
 
 interface ReportPageProps {
@@ -35,7 +33,7 @@ const handleExportPdf = (tableId: string, fileName: string, title: string) => {
     return;
   }
 
-  const doc = new jsPDF.jsPDF({
+  const doc = new jsPDF({
     orientation: 'landscape', // or 'portrait'
     unit: 'pt',
     format: 'a4',
@@ -65,43 +63,7 @@ const handleExportPdf = (tableId: string, fileName: string, title: string) => {
 
 
 const ReportPage: React.FC<ReportPageProps> = ({ data }) => {
-  const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
-  const [allBranches, setAllBranches] = useState<Branch[]>([]);
-  const [loadingMetadata, setLoadingMetadata] = useState(true);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
-
-  const isMounted = useRef(false);
-
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  const fetchMetadata = useCallback(async () => {
-    setLoadingMetadata(true);
-    try {
-      const staffList = await getStaffData();
-      const branchList = await getBranches();
-      if (isMounted.current) {
-        setAllStaff(staffList);
-        setAllBranches(branchList);
-      }
-    } catch (err) {
-      if (isMounted.current) {
-        setMetadataError(err instanceof Error ? err.message : 'Failed to fetch staff and branch data.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoadingMetadata(false);
-      }
-    }
-  }, [isMounted]);
-
-  useEffect(() => {
-    fetchMetadata();
-  }, [fetchMetadata]);
+  // Removed states and effects for fetching allStaff and allBranches as they are no longer needed.
 
   const mtdReportData = useMemo(() => {
       if (!data) return { records: [], summary: null };
@@ -167,66 +129,7 @@ const ReportPage: React.FC<ReportPageProps> = ({ data }) => {
     }
   }, [data]);
 
-  // New: MTD Achievement by Staff Member
-  const staffMtdAchievements = useMemo(() => {
-    if (!mtdReportData.records || mtdReportData.records.length === 0 || allStaff.length === 0) return [];
-
-    const achievementsMap = new Map<string, { staffName: string; employeeCode: string; mtdAmount: number; mtdAccounts: number; branchName: string; }>();
-
-    allStaff.forEach(staff => {
-      achievementsMap.set(staff.employeeCode, {
-        staffName: staff.employeeName,
-        employeeCode: staff.employeeCode,
-        mtdAmount: 0,
-        mtdAccounts: 0,
-        branchName: staff.branchName,
-      });
-    });
-
-    mtdReportData.records.forEach(record => {
-      const staffName = record['STAFF NAME'] as string;
-      const staffCode = allStaff.find(s => s.employeeName === staffName)?.employeeCode;
-      
-      if (staffCode && achievementsMap.has(staffCode)) {
-        const current = achievementsMap.get(staffCode)!;
-        current.mtdAmount += (Number(record['GRAND TOTAL AMT']) || 0);
-        current.mtdAccounts += (Number(record['GRAND TOTAL AC']) || 0);
-        achievementsMap.set(staffCode, current);
-      }
-    });
-
-    return Array.from(achievementsMap.values()).filter(a => a.mtdAmount > 0 || a.mtdAccounts > 0);
-  }, [mtdReportData.records, allStaff]);
-
-  // New: MTD Achievement by Manager/Branch (for admin view)
-  const managerMtdAchievements = useMemo(() => {
-    if (!mtdReportData.records || mtdReportData.records.length === 0 || allBranches.length === 0) return [];
-
-    const achievementsMap = new Map<string, { branchName: string; managerName: string; managerCode: string; mtdAmount: number; mtdAccounts: number; }>();
-
-    allBranches.forEach(branch => {
-      achievementsMap.set(branch.branchName, {
-        branchName: branch.branchName,
-        managerName: branch.branchManagerName,
-        managerCode: branch.branchManagerCode,
-        mtdAmount: 0,
-        mtdAccounts: 0,
-      });
-    });
-
-    mtdReportData.records.forEach(record => {
-      const branchName = record['BRANCH NAME'] as string;
-      if (branchName && achievementsMap.has(branchName)) {
-        const current = achievementsMap.get(branchName)!;
-        current.mtdAmount += (Number(record['GRAND TOTAL AMT']) || 0);
-        current.mtdAccounts += (Number(record['GRAND TOTAL AC']) || 0);
-        achievementsMap.set(branchName, current);
-      }
-    });
-
-    return Array.from(achievementsMap.values()).filter(a => a.mtdAmount > 0 || a.mtdAccounts > 0);
-  }, [mtdReportData.records, allBranches]);
-
+  // Removed staffMtdAchievements and managerMtdAchievements useMemos.
 
   return (
     <div className="space-y-6">
@@ -301,78 +204,6 @@ const ReportPage: React.FC<ReportPageProps> = ({ data }) => {
                 ) : (
                     <p className="text-center text-gray-500 dark:text-gray-400 py-8">
                         No data available for the current month.
-                    </p>
-                )}
-            </CollapsibleSection>
-
-            {/* New: Staff-wise MTD Achievement Report */}
-            <CollapsibleSection title="Staff-wise MTD Achievement" icon={UsersIcon}>
-                {loadingMetadata ? (
-                    <div className="flex justify-center items-center py-8"><LoaderIcon className="w-6 h-6" /></div>
-                ) : metadataError ? (
-                    <p className="text-center text-red-500 dark:text-red-400 py-8">{metadataError}</p>
-                ) : staffMtdAchievements.length > 0 ? (
-                    <DataTable
-                        title={`Staff-wise MTD Achievements for ${getMonthString()}`}
-                        headers={['Staff Name', 'Employee Code', 'Branch Name', 'MTD Amount', 'MTD Accounts']}
-                        records={staffMtdAchievements.map(s => ({
-                            'Staff Name': s.staffName,
-                            'Employee Code': s.employeeCode,
-                            'Branch Name': s.branchName,
-                            'MTD Amount': formatCurrency(s.mtdAmount),
-                            'MTD Accounts': s.mtdAccounts.toLocaleString(),
-                        }))}
-                        tableId="staff-mtd-achievement-table"
-                        exportFileName={`staff-mtd-report-${getMonthString()}`} // Enable CSV export
-                        action={
-                            <button
-                                onClick={() => handleExportPdf('staff-mtd-achievement-table', `staff-mtd-report-${getMonthString()}`, `Staff-wise MTD Achievement - ${getMonthString()}`)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                            >
-                                <FileDownIcon className="w-4 h-4" />
-                                Export PDF
-                            </button>
-                        }
-                    />
-                ) : (
-                    <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-                        No staff-wise MTD achievement data available for the current month.
-                    </p>
-                )}
-            </CollapsibleSection>
-
-            {/* New: Manager-wise/Branch-wise MTD Achievement Report (Admin only) */}
-            <CollapsibleSection title="Branch-wise MTD Achievement" icon={OfficeBuildingIcon}>
-                {loadingMetadata ? (
-                    <div className="flex justify-center items-center py-8"><LoaderIcon className="w-6 h-6" /></div>
-                ) : metadataError ? (
-                    <p className="text-center text-red-500 dark:text-red-400 py-8">{metadataError}</p>
-                ) : managerMtdAchievements.length > 0 ? (
-                    <DataTable
-                        title={`Branch-wise MTD Achievements for ${getMonthString()}`}
-                        headers={['Branch Name', 'Branch Manager', 'Manager Emp Code', 'MTD Amount', 'MTD Accounts']}
-                        records={managerMtdAchievements.map(m => ({
-                            'Branch Name': m.branchName,
-                            'Branch Manager': m.managerName,
-                            'Manager Emp Code': m.managerCode,
-                            'MTD Amount': formatCurrency(m.mtdAmount),
-                            'MTD Accounts': m.mtdAccounts.toLocaleString(),
-                        }))}
-                        tableId="branch-mtd-achievement-table"
-                        exportFileName={`branch-mtd-report-${getMonthString()}`} // Enable CSV export
-                        action={
-                            <button
-                                onClick={() => handleExportPdf('branch-mtd-achievement-table', `branch-mtd-report-${getMonthString()}`, `Branch-wise MTD Achievement - ${getMonthString()}`)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                            >
-                                <FileDownIcon className="w-4 h-4" />
-                                Export PDF
-                            </button>
-                        }
-                    />
-                ) : (
-                    <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-                        No branch-wise MTD achievement data available for the current month.
                     </p>
                 )}
             </CollapsibleSection>

@@ -6,7 +6,6 @@ let MOCK_USERS: User[] = [];
 
 // New: Define system user IDs for consistent lookup
 const ADMIN_USER_ID = 'admin-user-0';
-const ZONAL_MANAGER_USER_ID = 'zm-user-0';
 
 // Updated reinitializeAuth to accept staffList as an argument
 export const reinitializeAuth = (staffList: StaffMember[]) => {
@@ -29,40 +28,16 @@ export const reinitializeAuth = (staffList: StaffMember[]) => {
             managedZones: adminStaffMember.managedZones,
             managedBranches: adminStaffMember.managedBranches,
             subordinates: adminStaffMember.subordinates?.map(s => ({ 
-                id: s.id, username: s.employeeCode, role: s.function.toUpperCase().includes('MANAGER') || s.function.toUpperCase().includes('HEAD') || s.function.toUpperCase().includes('TL') ? 'manager' : 'user', staffName: s.employeeName, designation: s.function, contactNumber: s.contactNumber, branchName: s.branchName, employeeCode: s.employeeCode, zone: s.zone, region: s.region, districtName: s.districtName, managedZones: s.managedZones, managedBranches: s.managedBranches, subordinates: [], 
+                id: s.id, username: s.employeeCode, role: s.function.toUpperCase().includes('MANAGER') || s.function.toUpperCase().includes('HEAD') || s.function.toUpperCase().includes('TL') ? 'manager' : 'user', staffName: s.employeeName, designation: s.function, contactNumber: s.contactNumber, branchName: s.branchName, employeeCode: s.employeeCode, zone: s.zone, region: s.region, districtName: s.districtName, managedZones: s.managedZones, managedBranches: s.managedBranches, subordinates: [], reportsToEmployeeCode: s.reportsToEmployeeCode, 
             })) || [], 
         });
         passwords['admin'] = 'admin123';
     }
     
-    // Add the default Zonal Manager user
-    const zonalManagerStaffMember = staffList.find(s => s.id === ZONAL_MANAGER_USER_ID);
-    if (zonalManagerStaffMember) {
-        users.push({
-            id: zonalManagerStaffMember.id,
-            username: 'zm', // Hardcoded username for ZM
-            role: 'manager', // ZM is a manager role
-            staffName: zonalManagerStaffMember.employeeName,
-            designation: zonalManagerStaffMember.function,
-            contactNumber: zonalManagerStaffMember.contactNumber,
-            branchName: zonalManagerStaffMember.branchName,
-            employeeCode: zonalManagerStaffMember.employeeCode,
-            zone: zonalManagerStaffMember.zone,
-            region: zonalManagerStaffMember.region,
-            districtName: zonalManagerStaffMember.districtName,
-            managedZones: zonalManagerStaffMember.managedZones,
-            managedBranches: zonalManagerStaffMember.managedBranches,
-            subordinates: zonalManagerStaffMember.subordinates?.map(s => ({
-                id: s.id, username: s.employeeCode, role: s.function.toUpperCase().includes('MANAGER') || s.function.toUpperCase().includes('HEAD') || s.function.toUpperCase().includes('TL') ? 'manager' : 'user', staffName: s.employeeName, designation: s.function, contactNumber: s.contactNumber, branchName: s.branchName, employeeCode: s.employeeCode, zone: s.zone, region: s.region, districtName: s.districtName, managedZones: s.managedZones, managedBranches: s.managedBranches, subordinates: [],
-            })) || [],
-        });
-        passwords['zm'] = 'zm123'; // Hardcoded password for ZM
-    }
-
 
     // Generate users from staff list (excluding the already handled system users)
     staffList.forEach(staff => {
-        if (staff.id === ADMIN_USER_ID || staff.id === ZONAL_MANAGER_USER_ID) return; // Skip if already added
+        if (staff.id === ADMIN_USER_ID) return; // Skip if already added
 
         const username = staff.employeeCode;
         if (!username) return;
@@ -90,6 +65,7 @@ export const reinitializeAuth = (staffList: StaffMember[]) => {
             districtName: staff.districtName, // Include districtName
             managedZones: staff.managedZones, // Include managed zones
             managedBranches: staff.managedBranches, // Include managed branches
+            reportsToEmployeeCode: staff.reportsToEmployeeCode, // FIX: Added missing reportsToEmployeeCode mapping
             // Map StaffMember subordinates to User subordinates
             subordinates: staff.subordinates?.map(s => ({
                 id: s.id,
@@ -105,6 +81,7 @@ export const reinitializeAuth = (staffList: StaffMember[]) => {
                 districtName: s.districtName,
                 managedZones: s.managedZones,
                 managedBranches: s.managedBranches,
+                reportsToEmployeeCode: s.reportsToEmployeeCode, // FIX: Added missing reportsToEmployeeCode mapping for subordinates
                 // Do not recursively add subordinates to prevent deep nested objects.
                 // If a full hierarchy walk is needed, it should be done dynamically.
                 subordinates: [], 

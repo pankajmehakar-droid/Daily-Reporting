@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, StaffMember, Kra, ProductMetric, DesignationKRA, Designation, TargetPeriodType } from '../types';
-import { getAllStaff, getBranches, getStaffByBranch, getKrasForStaff, saveKra, updateKra, deleteKra, getProductMetrics, getRecursiveSubordinateInfo, getDesignationKraByDesignation } from '../services/dataService'; // Import getRecursiveSubordinateInfo, getDesignationKraByDesignation
-import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, DollarSignIcon, HashIcon, SettingsIcon, CheckCircleIcon } from '../components/icons'; // Added CheckCircleIcon and SettingsIcon
-import SummaryCard from '../components/SummaryCard'; // Import SummaryCard
-import { getMonthString, getKraStatus, formatDisplayDate, getYearString } from '../utils/dateHelpers'; // Import from new utility
-import ProductSettingsPage from './ProductSettingsPage'; // Import ProductSettingsPage
-import { ADMIN_USER_ID } from '../services/dataService'; // Import ADMIN_USER_ID
+import { User, StaffMember, Target, ProductMetric, DesignationTarget, Designation, TargetPeriodType } from '../types';
+import { getAllStaff, getBranches, getStaffByBranch, getTargetsForStaff, saveTarget, updateTarget, deleteTarget, getProductMetrics, getRecursiveSubordinateInfo, getDesignationTargetByDesignation } from '../services/dataService';
+import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, DollarSignIcon, HashIcon, SettingsIcon, CheckCircleIcon } from '../components/icons';
+import SummaryCard from '../components/SummaryCard';
+import { getMonthString, getKraStatus, formatDisplayDate, getYearString } from '../utils/dateHelpers';
+import ProductSettingsPage from './ProductSettingsPage';
+import { ADMIN_USER_ID } from '../services/dataService';
 
-interface BulkKraFormData {
+interface BulkTargetFormData {
     staffId: string;
     periodType: TargetPeriodType; // New: monthly, mtd, ytd
     period: string; // YYYY-MM for monthly/mtd, YYYY for ytd
@@ -15,11 +15,11 @@ interface BulkKraFormData {
     metrics: { [metricName: string]: string | number }; // Stores target values for each metric
 }
 
-// FIX: Changed to named export
-export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser }) => { // Renamed from KraMappingPage
+// FIX: Renamed component from KraMappingPage to TargetMappingPage
+export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [branchStaff, setBranchStaff] = useState<StaffMember[]>([]);
     const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
-    const [allStaffKras, setAllStaffKras] = useState<Kra[]>([]); // For all KRAs of selected staff
+    const [allStaffTargets, setAllStaffTargets] = useState<Target[]>([]); // For all targets of selected staff
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -29,7 +29,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
 
     // Bulk target entry modal states
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-    const [bulkFormData, setBulkFormData] = useState<BulkKraFormData>({
+    const [bulkFormData, setBulkFormData] = useState<BulkTargetFormData>({
         staffId: '',
         periodType: 'monthly', // Default to monthly
         period: getMonthString(),
@@ -39,7 +39,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [productMetrics, setProductMetrics] = useState<ProductMetric[]>([]);
-    const [designationKras, setDesignationKras] = useState<DesignationKRA | null>(null); // New: KRA definitions for the selected staff's designation
+    const [designationTargets, setDesignationTargets] = useState<DesignationTarget | null>(null); // New: KRA definitions for the selected staff's designation
 
 
     // State for ProductSettings modal
@@ -134,21 +134,20 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
         fetchInitialData();
     }, [fetchInitialData]);
 
-    const fetchKrasAndDesignationKras = useCallback(async (staffMember: StaffMember) => {
+    const fetchTargetsAndDesignationTargets = useCallback(async (staffMember: StaffMember) => {
         setLoading(true);
         try {
-            const [kras, dkra] = await Promise.all([
-                getKrasForStaff(staffMember.employeeCode), // Get all KRAs for the staff
-                // FIX: Use staffMember.function directly, it's already of type Designation
-                getDesignationKraByDesignation(staffMember.function) // Get KRA definitions for staff's designation
+            const [targets, dtarget] = await Promise.all([
+                getTargetsForStaff(staffMember.employeeCode), // Get all targets for the staff
+                getDesignationTargetByDesignation(staffMember.function) // Get KRA definitions for staff's designation
             ]);
             if (!isMounted.current) return;
-            setAllStaffKras(kras); // Store all KRAs
-            setDesignationKras(dkra || null); // Store designation-specific KRA metrics
+            setAllStaffTargets(targets); // Store all targets
+            setDesignationTargets(dtarget || null); // Store designation-specific KRA metrics
 
         } catch (err) {
             if (isMounted.current) {
-                setError("Failed to fetch KRA data or designation KRA definitions.");
+                setError("Failed to fetch target data or designation target definitions.");
             }
         } finally {
             if (isMounted.current) {
@@ -159,38 +158,38 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
 
     useEffect(() => {
         if (selectedStaff) {
-            fetchKrasAndDesignationKras(selectedStaff);
+            fetchTargetsAndDesignationTargets(selectedStaff);
         } else {
-            setAllStaffKras([]);
-            setDesignationKras(null);
+            setAllStaffTargets([]);
+            setDesignationTargets(null);
         }
-    }, [selectedStaff, fetchKrasAndDesignationKras]);
+    }, [selectedStaff, fetchTargetsAndDesignationTargets]);
     
     // Generate unique periods for filter dropdown
     const availablePeriods = useMemo(() => {
-        const periods = new Set(allStaffKras.map(kra => kra.period));
+        const periods = new Set(allStaffTargets.map(target => target.period));
         const sortedPeriods = Array.from(periods).sort((a: string, b: string) => b.localeCompare(a)); // Sort descending
         return ['all', ...sortedPeriods];
-    }, [allStaffKras]);
+    }, [allStaffTargets]);
 
     const availablePeriodTypes = useMemo(() => {
-        const periodTypes = new Set(allStaffKras.map(kra => kra.periodType));
+        const periodTypes = new Set(allStaffTargets.map(target => target.periodType));
         const sortedPeriodTypes = Array.from(periodTypes).sort();
         return ['all', ...sortedPeriodTypes];
-    }, [allStaffKras]);
+    }, [allStaffTargets]);
 
 
-    // Filter KRAs based on selectedPeriodFilter and selectedPeriodTypeFilter
-    const filteredKras = useMemo(() => {
-        let kras = allStaffKras;
+    // Filter targets based on selectedPeriodFilter and selectedPeriodTypeFilter
+    const filteredTargets = useMemo(() => {
+        let targets = allStaffTargets;
         if (selectedPeriodFilter !== 'all') {
-            kras = kras.filter(kra => kra.period === selectedPeriodFilter);
+            targets = targets.filter(target => target.period === selectedPeriodFilter);
         }
         if (selectedPeriodTypeFilter !== 'all') {
-            kras = kras.filter(kra => kra.periodType === selectedPeriodTypeFilter);
+            targets = targets.filter(target => target.periodType === selectedPeriodTypeFilter);
         }
-        return kras;
-    }, [allStaffKras, selectedPeriodFilter, selectedPeriodTypeFilter]);
+        return targets;
+    }, [allStaffTargets, selectedPeriodFilter, selectedPeriodTypeFilter]);
 
     // Effect to pre-fill bulk form data when modal opens or selected staff/period changes
     useEffect(() => {
@@ -201,16 +200,16 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
         const staffBeingTargeted = branchStaff.find(s => s.id === bulkFormData.staffId);
         if (!staffBeingTargeted) return;
 
-        const currentPeriodTargets = allStaffKras.filter(
+        const currentPeriodTargets = allStaffTargets.filter(
             k => k.staffEmployeeCode === staffBeingTargeted.employeeCode && k.period === bulkFormData.period && k.periodType === bulkFormData.periodType
         );
 
         const newMetricsData: { [metricName: string]: string | number } = {};
         
-        // Filter product metrics based on designationKras.metricIds
+        // Filter product metrics based on designationTargets.metricIds
         const applicableMetricIds = (staffBeingTargeted.id === ADMIN_USER_ID) ? // Admin sees all metrics
             productMetrics.map(pm => pm.id) :
-            (designationKras?.metricIds || []);
+            (designationTargets?.metricIds || []);
 
         productMetrics.filter(metric => applicableMetricIds.includes(metric.id)).forEach(metric => {
             const existingTarget = currentPeriodTargets.find(t => t.metric === metric.name);
@@ -225,7 +224,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
             metrics: newMetricsData,
             dueDate: existingDueDate,
         }));
-    }, [isBulkModalOpen, bulkFormData.staffId, bulkFormData.period, bulkFormData.periodType, productMetrics, allStaffKras, selectedStaff, designationKras, branchStaff]);
+    }, [isBulkModalOpen, bulkFormData.staffId, bulkFormData.period, bulkFormData.periodType, productMetrics, allStaffTargets, selectedStaff, designationTargets, branchStaff]);
 
     const handleStaffChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const staffId = e.target.value;
@@ -246,6 +245,20 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
             period: getMonthString(), // Always defaults to current month for bulk edit
             dueDate: '',
             metrics: {},
+        });
+        setIsBulkModalOpen(true);
+    };
+    
+    const openBulkModalForEdit = (target: Target) => {
+        setError(null);
+        setNotification(null);
+        // Initialize with values from the specific target
+        setBulkFormData({
+            staffId: selectedStaff?.id || '',
+            periodType: target.periodType,
+            period: target.period,
+            dueDate: target.dueDate || '',
+            metrics: {}, // This will be populated by the useEffect
         });
         setIsBulkModalOpen(true);
     };
@@ -284,10 +297,10 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
         setError(null);
     };
 
-    // Filter product metrics for the bulk modal display based on designationKras
+    // Filter product metrics for the bulk modal display based on designationTargets
     const applicableMetricIds = (selectedStaff?.id === ADMIN_USER_ID) ?
         productMetrics.map(pm => pm.id) : // Admin sees all metrics
-        (designationKras?.metricIds || []);
+        (designationTargets?.metricIds || []);
 
     const filteredBulkMetrics = useMemo(() => {
         return productMetrics.filter(metric => applicableMetricIds.includes(metric.id));
@@ -337,7 +350,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
             return;
         }
 
-        const currentPeriodTargets = allStaffKras.filter(
+        const currentPeriodTargets = allStaffTargets.filter(
             k => k.staffEmployeeCode === staffToTarget.employeeCode && k.period === bulkFormData.period && k.periodType === bulkFormData.periodType
         );
 
@@ -364,13 +377,13 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                 };
 
                 if (existingTarget) {
-                    operations.push(updateKra(existingTarget.id, payload));
+                    operations.push(updateTarget(existingTarget.id, payload));
                 } else {
-                    operations.push(saveKra(payload));
+                    operations.push(saveTarget(payload));
                 }
             } else { // If value is 0, empty, or invalid, and an existing target exists, delete it
                 if (existingTarget) {
-                    operations.push(deleteKra(existingTarget.id));
+                    operations.push(deleteTarget(existingTarget.id));
                 }
             }
         });
@@ -381,7 +394,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
             setNotification({ message: `Bulk targets for ${staffToTarget.employeeName} (${bulkFormData.periodType} - ${bulkFormData.period}) submitted successfully.`, type: 'success' });
             if (isMounted.current) {
                 closeBulkModal();
-                fetchKrasAndDesignationKras(staffToTarget); // Re-fetch to update table
+                fetchTargetsAndDesignationTargets(staffToTarget); // Re-fetch to update table
             }
         } catch (err) {
             if (isMounted.current) {
@@ -394,85 +407,102 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
         }
     };
 
-    const handleDelete = async (kra: Kra) => {
-        if(window.confirm(`Are you sure you want to delete the target for "${kra.metric}" (${kra.periodType} - ${kra.period})?`)){
-            try {
-                setNotification(null);
-                await deleteKra(kra.id);
-                if (!isMounted.current) return;
-                setNotification({ message: `Target for ${kra.metric} (${kra.periodType} - ${kra.period}) deleted successfully.`, type: 'success' });
-                // Re-fetch KRA data for selected staff after deletion
-                if (selectedStaff) {
-                    fetchKrasAndDesignationKras(selectedStaff);
-                }
-            } catch(err){
-                if (isMounted.current) {
-                    setNotification({ message: err instanceof Error ? err.message : "Failed to delete target.", type: 'error' });
-                }
+    const handleDelete = async (target: Target) => {
+        if (!window.confirm(`Are you sure you want to delete the target for "${target.metric}" (${target.periodType} - ${target.period})?`)) {
+            return;
+        }
+    
+        const originalTargets = [...allStaffTargets]; // Create a shallow copy for restoration
+    
+        // 1. Optimistically remove the item from the UI state.
+        setAllStaffTargets(prevTargets => prevTargets.filter(t => t.id !== target.id));
+        setNotification(null); // Clear previous notifications
+    
+        try {
+            // 2. Perform the actual deletion.
+            await deleteTarget(target.id);
+            
+            // 3. On success, the optimistic update was correct. Show a success message.
+            if (isMounted.current) {
+                setNotification({ 
+                    message: `Target for ${target.metric} deleted successfully.`, 
+                    type: 'success' 
+                });
+            }
+    
+        } catch (err) {
+            // 4. On failure, revert the UI state and show a persistent error.
+            if (isMounted.current) {
+                // Restore the full list from the backup copy
+                setAllStaffTargets(originalTargets);
+                setNotification({ 
+                    message: err instanceof Error ? err.message : "Failed to delete target. The item has been restored.", 
+                    type: 'error' 
+                });
             }
         }
     };
 
-    // Calculate totals for the DISPLAY TABLE (based on filteredKras)
-    const { displayTotalAmount, displayTotalAccount, groupedDisplayKras } = useMemo(() => {
+    // Calculate totals for the DISPLAY TABLE (based on filteredTargets)
+    const { displayTotalAmount, displayTotalAccount, groupedDisplayTargets } = useMemo(() => {
         let totalAmount = 0;
         let totalAccount = 0;
         
-        const amountKras: Kra[] = [];
-        const accountKras: Kra[] = [];
-        const otherKras: Kra[] = []; // For any metrics not explicitly Amount or Account
+        const amountTargets: Target[] = [];
+        const accountTargets: Target[] = [];
+        const otherTargets: Target[] = []; // For any metrics not explicitly Amount or Account
 
-        filteredKras.forEach(kra => {
-            const metricDef = productMetrics.find(pm => pm.name === kra.metric);
+        filteredTargets.forEach(target => {
+            const metricDef = productMetrics.find(pm => pm.name === target.metric);
             if (metricDef) {
                 if (metricDef.type === 'Amount') {
-                    amountKras.push(kra);
+                    amountTargets.push(target);
                     // Sum only if not 'GRAND TOTAL AMT'
                     if (metricDef.name !== 'GRAND TOTAL AMT') {
-                        totalAmount += kra.target;
+                        totalAmount += target.target;
                     }
                 } else if (metricDef.type === 'Account') {
-                    accountKras.push(kra);
+                    accountTargets.push(target);
                      // Sum only if not 'GRAND TOTAL AC' and not 'NEW-SS/AGNT'
                     if (metricDef.name !== 'GRAND TOTAL AC' && metricDef.name !== 'NEW-SS/AGNT') {
-                        totalAccount += kra.target;
+                        totalAccount += target.target;
                     }
                 } else { // Type 'Other', e.g., NEW-SS/AGNT
-                    otherKras.push(kra);
+                    otherTargets.push(target);
                     // For 'NEW-SS/AGNT' (type 'Other'), display it under accounts, but don't sum.
                     // This is handled by specific exclusion in `totalAccount` calculation.
                     // A better approach would be to have a 'contributesToGrandTotalAc' flag for such metrics
                     // and apply that here. For now, matching the previous logic.
                     if (metricDef.name === 'NEW-SS/AGNT') {
-                        totalAccount += kra.target;
+                        totalAccount += target.target;
                     }
                 }
             }
         });
         
         // Ensure Grand Totals reflect calculated sums
-        const grandTotalAmtTarget = filteredKras.find(t => t.metric === 'GRAND TOTAL AMT');
+        const grandTotalAmtTarget = filteredTargets.find(t => t.metric === 'GRAND TOTAL AMT');
         if (grandTotalAmtTarget) {
             totalAmount = grandTotalAmtTarget.target;
         }
 
-        const grandTotalAcTarget = filteredKras.find(t => t.metric === 'GRAND TOTAL AC');
+        const grandTotalAcTarget = filteredTargets.find(t => t.metric === 'GRAND TOTAL AC');
         if (grandTotalAcTarget) {
             totalAccount = grandTotalAcTarget.target;
         }
 
 
         // Sort for consistent display
-        amountKras.sort((a, b) => a.metric.localeCompare(b.metric));
-        accountKras.sort((a, b) => a.metric.localeCompare(b.metric));
-        otherKras.sort((a, b) => a.metric.localeCompare(b.metric));
+        amountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        accountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        otherTargets.sort((a, b) => a.metric.localeCompare(b.metric));
 
         return {
             displayTotalAmount: totalAmount,
             displayTotalAccount: totalAccount,
-            groupedDisplayKras: { amount: amountKras, account: accountKras, other: otherKras },
+            groupedDisplayTargets: { amount: amountTargets, account: accountTargets, other: otherTargets },
         };
-    }, [filteredKras, productMetrics]);
+    }, [filteredTargets, productMetrics]);
 
 
     // Filter product metrics for the bulk modal display (excluding grand totals for direct input)
@@ -486,11 +516,10 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
         
         if (selectedStaff.id === ADMIN_USER_ID) return false; // Admin can always submit
 
-        if (!designationKras || designationKras.metricIds.length === 0) return true; // No KRAs configured for designation
+        if (!designationTargets || designationTargets.metricIds.length === 0) return true; // No KRAs configured for designation
 
         return false;
-    }, [selectedStaff, productMetrics.length, designationKras]);
-
+    }, [selectedStaff, productMetrics.length, designationTargets]);
 
     return (
         <div className="space-y-6">
@@ -582,11 +611,11 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                          )}
                     </div>
                 )}
-                {selectedStaff && selectedStaff.id !== ADMIN_USER_ID && currentUser.role === 'admin' && (!designationKras || designationKras.metricIds.length === 0) && (
+                {selectedStaff && selectedStaff.id !== ADMIN_USER_ID && currentUser.role === 'admin' && (!designationTargets || designationTargets.metricIds.length === 0) && (
                     <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md">
                         <p className="text-sm">
                             <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
-                            No KRA metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Mapping &gt; Target Mapping &gt; Designation KRA Setup" to enable target submission.
+                            No Target metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Mapping &gt; Target Mapping &gt; Designation Target Setup" to enable target submission.
                         </p>
                     </div>
                 )}
@@ -619,7 +648,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                          <div className="p-10 text-center"><LoaderIcon className="w-6 h-6 mx-auto" /></div>
                     ) : (
                         <div className="overflow-x-auto">
-                            {filteredKras.length > 0 ? (
+                            {filteredTargets.length > 0 ? (
                                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                     <thead className="bg-gray-50 dark:bg-gray-700">
                                         <tr>
@@ -635,68 +664,68 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {groupedDisplayKras.amount.length > 0 && (
+                                        {groupedDisplayTargets.amount.length > 0 && (
                                             <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Amount Targets</td></tr>
                                         )}
-                                        {groupedDisplayKras.amount.map(kra => {
-                                            const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                        {groupedDisplayTargets.amount.map(target => {
+                                            const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
-                                                <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{kra.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(kra.dueDate)}</td>
+                                                <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
                                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                                     {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can modify
                                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <button onClick={() => openBulkModal()} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${kra.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                            <button onClick={() => handleDelete(kra)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${kra.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                            <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
+                                                            <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
                                                         </td>
                                                     )}
                                                 </tr>
                                             );
                                         })}
-                                        {groupedDisplayKras.account.length > 0 && (
+                                        {groupedDisplayTargets.account.length > 0 && (
                                             <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Account Targets</td></tr>
                                         )}
-                                        {groupedDisplayKras.account.map(kra => {
-                                            const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                        {groupedDisplayTargets.account.map(target => {
+                                            const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
-                                                <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{kra.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(kra.dueDate)}</td>
+                                                <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
                                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
-                                                    {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can modify
-                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <button onClick={() => openBulkModal()} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${kra.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                            <button onClick={() => handleDelete(kra)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${kra.metric}`}><TrashIcon className="w-5 h-5"/></button>
-                                                        </td>
+                                                    {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+                                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                        <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
+                                                        <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                      </td>
                                                     )}
                                                 </tr>
                                             );
                                         })}
-                                        {groupedDisplayKras.other.length > 0 && (
+                                        {groupedDisplayTargets.other.length > 0 && (
                                             <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Other Targets</td></tr>
                                         )}
-                                        {groupedDisplayKras.other.map(kra => {
-                                            const status = getKraStatus(kra.dueDate, kra.periodType, kra.period);
+                                        {groupedDisplayTargets.other.map(target => {
+                                            const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
-                                                <tr key={kra.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{kra.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{kra.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{kra.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(kra.dueDate)}</td>
+                                                <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
                                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
-                                                    {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can modify
-                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                            <button onClick={() => openBulkModal()} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${kra.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                            <button onClick={() => handleDelete(kra)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${kra.metric}`}><TrashIcon className="w-5 h-5"/></button>
-                                                        </td>
+                                                    {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+                                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                        <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
+                                                        <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                      </td>
                                                     )}
                                                 </tr>
                                             );
@@ -704,19 +733,21 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                     </tbody>
                                 </table>
                             ) : (
-                                <p className="text-center text-gray-500 dark:text-gray-400 py-8">No KRA targets found for the selected staff and period.</p>
+                                <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                                    No targets found for the selected criteria.
+                                </p>
                             )}
                         </div>
                     )}
                 </div>
             )}
             
-            {/* Bulk Target Submission Modal */}
+            {/* NEW: Bulk Target Submission Modal */}
             {isBulkModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4" aria-modal="true" role="dialog">
                     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center p-4 border-b dark:border-gray-700">
-                            <h3 className="text-lg font-semibold dark:text-gray-100">Bulk KRA Target Submission</h3>
+                            <h3 className="text-lg font-semibold dark:text-gray-100">Bulk Target Submission</h3>
                             <button onClick={closeBulkModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close modal"><XIcon className="w-6 h-6" /></button>
                         </div>
                         <form onSubmit={handleBulkSubmit} className="flex-grow flex flex-col overflow-hidden">
@@ -732,7 +763,7 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                             onChange={handleBulkFormChange}
                                             className="input-style w-full"
                                             required
-                                            disabled={true} // Always disabled, uses selectedStaff from main page
+                                            disabled={true}
                                         >
                                             {branchStaff.length > 0 ? (
                                                 branchStaff.map(s => <option key={s.id} value={s.id}>{s.employeeName} ({s.employeeCode})</option>)
@@ -742,21 +773,20 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                         </select>
                                     </div>
                                     <div>
-                                        <label htmlFor="bulkPeriodType" className="label-style">Target Period Type</label>
+                                        <label htmlFor="bulkPeriodType" className="label-style">Period Type</label>
                                         <select
                                             name="periodType"
                                             id="bulkPeriodType"
                                             value={bulkFormData.periodType}
                                             onChange={handleBulkFormChange}
-                                            className="input-style w-full"
                                             required
+                                            className="input-style w-full"
                                         >
                                             <option value="monthly">Monthly</option>
-                                            <option value="mtd">Month-to-Date (MTD)</option>
-                                            <option value="ytd">Year-to-Date (YTD)</option>
+                                            <option value="ytd">YTD</option>
                                         </select>
                                     </div>
-                                    <div>
+                                    <div className="sm:col-span-2">
                                         <label htmlFor="bulkPeriod" className="label-style">Period</label>
                                         <input
                                             type={bulkFormData.periodType === 'ytd' ? 'number' : 'month'}
@@ -766,12 +796,11 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                             onChange={handleBulkFormChange}
                                             required
                                             className="input-style w-full"
-                                            min={bulkFormData.periodType === 'ytd' ? "2000" : undefined} // Min year if YTD
-                                            max={bulkFormData.periodType === 'ytd' ? getYearString() : undefined} // Max year if YTD
+                                            {...(bulkFormData.periodType === 'ytd' ? { placeholder: "YYYY", min: "2020", max: "2050" } : {})}
                                         />
                                     </div>
-                                    <div>
-                                        <label htmlFor="bulkDueDate" className="label-style">Due Date (Optional)</label>
+                                    <div className="sm:col-span-2">
+                                        <label htmlFor="bulkDueDate" className="label-style">Overall Due Date (Optional)</label>
                                         <input
                                             type="date"
                                             name="dueDate"
@@ -779,109 +808,98 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                                             value={bulkFormData.dueDate}
                                             onChange={handleBulkFormChange}
                                             className="input-style w-full"
-                                            disabled={bulkFormData.periodType === 'ytd'} // YTD targets typically don't have a specific due date
                                         />
                                     </div>
                                 </div>
                                 <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mt-6">Product Wise Targets</h4>
-                                {filteredBulkMetrics.length === 0 && selectedStaff && selectedStaff.id !== ADMIN_USER_ID ? (
-                                    <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md">
-                                        <p className="text-sm">
-                                            <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
-                                            No KRA metrics configured for "{selectedStaff.function}". Please set them in "Admin &gt; Mapping &gt; Target Mapping &gt; Designation KRA Setup".
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                         {/* Amount Targets Column */}
-                                        <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-md">
-                                            <h5 className="font-bold text-gray-700 dark:text-gray-200">Amount Targets</h5>
-                                            {editableAmountMetrics.length > 0 ? (
-                                                editableAmountMetrics.map(metric => (
-                                                    <div key={metric.id}>
-                                                        <label htmlFor={`metric-${metric.name}`} className="label-style">{metric.name} ({metric.unitOfMeasure})</label>
-                                                        <input
-                                                            type="number"
-                                                            name={`metric-${metric.name}`}
-                                                            id={`metric-${metric.name}`}
-                                                            value={String(bulkFormData.metrics[metric.name] ?? '')}
-                                                            onChange={handleBulkFormChange}
-                                                            className="input-style w-full"
-                                                            min="0"
-                                                            placeholder="0"
-                                                        />
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">No amount metrics configured for this designation.</p>
-                                            )}
-                                            <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
-                                                <label htmlFor="metric-GRAND TOTAL AMT" className="label-style font-bold">GRAND TOTAL AMT (INR)</label>
-                                                <input
-                                                    type="text"
-                                                    id="metric-GRAND TOTAL AMT"
-                                                    value={calculatedTotalAmount.toLocaleString()}
-                                                    readOnly
-                                                    className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Account Targets Column */}
-                                        <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-md">
-                                            <h5 className="font-bold text-gray-700 dark:text-gray-200">Account & Other Targets</h5>
-                                            {editableAccountMetrics.length > 0 ? (
-                                                editableAccountMetrics.map(metric => (
-                                                    <div key={metric.id}>
-                                                        <label htmlFor={`metric-${metric.name}`} className="label-style">{metric.name} ({metric.unitOfMeasure})</label>
-                                                        <input
-                                                            type="number"
-                                                            name={`metric-${metric.name}`}
-                                                            id={`metric-${metric.name}`}
-                                                            value={String(bulkFormData.metrics[metric.name] ?? '')}
-                                                            onChange={handleBulkFormChange}
-                                                            className="input-style w-full"
-                                                            min="0"
-                                                            placeholder="0"
-                                                        />
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">No account metrics configured for this designation.</p>
-                                            )}
-                                             {/* Other metrics like NEW-SS/AGNT */}
-                                            {otherMetrics.map(metric => (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                     {/* Amount Targets Column */}
+                                    <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-md">
+                                        <h5 className="font-bold text-gray-700 dark:text-gray-200">Amount Targets</h5>
+                                        {editableAmountMetrics.length > 0 ? (
+                                            editableAmountMetrics.map(metric => (
                                                 <div key={metric.id}>
                                                     <label htmlFor={`metric-${metric.name}`} className="label-style">{metric.name} ({metric.unitOfMeasure})</label>
                                                     <input
                                                         type="number"
                                                         name={`metric-${metric.name}`}
                                                         id={`metric-${metric.name}`}
-                                                        value={String(bulkFormData.metrics[metric.name] ?? '')}
+                                                        value={bulkFormData.metrics[metric.name] ?? ''}
                                                         onChange={handleBulkFormChange}
                                                         className="input-style w-full"
                                                         min="0"
                                                         placeholder="0"
                                                     />
                                                 </div>
-                                            ))}
-                                            <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
-                                                <label htmlFor="metric-GRAND TOTAL AC" className="label-style font-bold">GRAND TOTAL AC (Units)</label>
-                                                <input
-                                                    type="text"
-                                                    id="metric-GRAND TOTAL AC"
-                                                    value={calculatedTotalAccount.toLocaleString()}
-                                                    readOnly
-                                                    className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
-                                                />
-                                            </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No amount metrics configured for this designation.</p>
+                                        )}
+                                        <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
+                                            <label htmlFor="metric-GRAND TOTAL AMT" className="label-style font-bold">GRAND TOTAL AMT (INR)</label>
+                                            <input
+                                                type="text"
+                                                id="metric-GRAND TOTAL AMT"
+                                                value={calculatedTotalAmount.toLocaleString()}
+                                                readOnly
+                                                className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
+                                            />
                                         </div>
                                     </div>
-                                )}
+
+                                    {/* Account Targets Column */}
+                                    <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-md">
+                                        <h5 className="font-bold text-gray-700 dark:text-gray-200">Account & Other Targets</h5>
+                                        {editableAccountMetrics.length > 0 ? (
+                                            editableAccountMetrics.map(metric => (
+                                                <div key={metric.id}>
+                                                    <label htmlFor={`metric-${metric.name}`} className="label-style">{metric.name} ({metric.unitOfMeasure})</label>
+                                                    <input
+                                                        type="number"
+                                                        name={`metric-${metric.name}`}
+                                                        id={`metric-${metric.name}`}
+                                                        value={bulkFormData.metrics[metric.name] ?? ''}
+                                                        onChange={handleBulkFormChange}
+                                                        className="input-style w-full"
+                                                        min="0"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No account metrics configured for this designation.</p>
+                                        )}
+                                        {otherMetrics.map(metric => (
+                                            <div key={metric.id}>
+                                                <label htmlFor={`metric-${metric.name}`} className="label-style">{metric.name} ({metric.unitOfMeasure})</label>
+                                                <input
+                                                    type="number"
+                                                    name={`metric-${metric.name}`}
+                                                    id={`metric-${metric.name}`}
+                                                    value={bulkFormData.metrics[metric.name] ?? ''}
+                                                    onChange={handleBulkFormChange}
+                                                    className="input-style w-full"
+                                                    min="0"
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                        ))}
+                                        <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
+                                            <label htmlFor="metric-GRAND TOTAL AC" className="label-style font-bold">GRAND TOTAL AC (Units)</label>
+                                            <input
+                                                type="text"
+                                                id="metric-GRAND TOTAL AC"
+                                                value={calculatedTotalAccount.toLocaleString()}
+                                                readOnly
+                                                className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 flex-shrink-0">
                                 <button type="button" onClick={closeBulkModal} className="btn-secondary">Cancel</button>
-                                <button type="submit" disabled={isSubmitting || !selectedStaff || filteredBulkMetrics.length === 0} className="btn-primary flex items-center gap-2">
+                                <button type="submit" disabled={isSubmitting || !selectedStaff || isBulkSubmitDisabled} className="btn-primary flex items-center gap-2">
                                     {isSubmitting && <LoaderIcon className="w-4 h-4" />}
                                     {isSubmitting ? 'Saving...' : 'Save All Targets'}
                                 </button>
@@ -890,23 +908,23 @@ export const KraMappingPage: React.FC<{ currentUser: User }> = ({ currentUser })
                     </div>
                 </div>
             )}
-
-            {isProductSettingsModalOpen && (
+             {isProductSettingsModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
                     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center p-4 border-b dark:border-gray-700">
                             <h3 className="text-lg font-semibold dark:text-gray-100">Manage Product Metrics</h3>
-                            <button onClick={() => setIsProductSettingsModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close product settings modal"><XIcon className="w-6 h-6" /></button>
+                            <button onClick={() => setIsProductSettingsModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Close modal"><XIcon className="w-6 h-6" /></button>
                         </div>
-                        <div className="flex-grow overflow-y-auto p-6">
-                            <ProductSettingsPage onClose={() => setIsProductSettingsModalOpen(false)} onMetricsUpdated={fetchInitialData} currentUser={currentUser} />
-                        </div>
-                         <div className="flex justify-end items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700">
-                            <button type="button" onClick={() => setIsProductSettingsModalOpen(false)} className="btn btn-secondary">Close</button>
+                        <div className="p-6 overflow-y-auto">
+                            <ProductSettingsPage 
+                                currentUser={currentUser} 
+                                onClose={() => setIsProductSettingsModalOpen(false)} 
+                                onMetricsUpdated={fetchInitialData} // Refresh all data when metrics change
+                            />
                         </div>
                     </div>
                 </div>
-            )}
+             )}
         </div>
     );
 };

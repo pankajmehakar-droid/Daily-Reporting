@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, DailyAchievementRecord, PROJECTION_DEMAND_METRIC_NAMES } from '../types';
 import { LoaderIcon, CheckCircleIcon, UploadIcon, FileDownIcon, AlertTriangleIcon, XIcon, TrashIcon, Share2Icon } from '../components/icons'; // Added Share2Icon
 import { getDailyAchievementRecord, addDailyAchievementRecord, updateDailyAchievementRecord, addMultipleDailyAchievementRecords, getDailyAchievementRecords, clearDailyAchievementRecords, getAllStaff } from '../services/dataService'; // Added getAllStaff for staff name validation
+// FIX: Corrected import to include both date conversion functions without duplication.
 import { getTodayDateYYYYMMDD, convertYYYYMMDDtoDDMMYYYY, convertDDMMYYYYtoYYYYMMDD } from '../utils/dateHelpers';
 
 // Declare XLSX from the script tag in index.html
@@ -25,7 +25,7 @@ interface SubmitDailyAchievementPageProps {
 const ALL_DAILY_ACHIEVEMENT_NUMBER_METRICS = [
     'DDS AMT', 'DAM AMT', 'MIS AMT', 'FD AMT', 'RD AMT', 'SMBG AMT', 'CUR-GOLD-AMT', 'CUR-WEL-AMT', 'SAVS-AMT', 'INSU AMT', 'TASC AMT', 'SHARE AMT',
     'DDS AC', 'DAM AC', 'MIS AC', 'FD AC', 'RD AC', 'SMBG AC', 'CUR-GOLD-AC', 'CUR-WEL-AC', 'SAVS-AC', 'NEW-SS/AGNT', 'INSU AC', 'TASC AC', 'SHARE AC',
-    'TOTAL ACCOUNTS', 'TOTAL AMOUNTS', 'GRAND TOTAL AC', 'GRAND TOTAL AMT'
+    'GRAND TOTAL AC', 'GRAND TOTAL AMT'
 ] as const; // Use as const to get a tuple type
 
 const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({ user, onDataUpdate, onNavigate }) => {
@@ -115,20 +115,28 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
     return { totalAccounts, totalAmounts };
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    const newFormData: AchievementFormData = { ...formData, [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value };
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value, type } = e.target;
+        
+        // Use a functional update to ensure we're working with the latest state
+        setFormData(prevFormData => {
+            const updatedFormData: AchievementFormData = {
+                ...prevFormData,
+                [name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value,
+            };
 
-    // Automatically calculate totals for display fields
-    const { totalAccounts, totalAmounts } = calculateTotals(newFormData);
-    newFormData['TOTAL ACCOUNTS'] = totalAccounts;
-    newFormData['TOTAL AMOUNTS'] = totalAmounts;
-    newFormData['GRAND TOTAL AC'] = totalAccounts;
-    newFormData['GRAND TOTAL AMT'] = totalAmounts;
+            // Recalculate totals based on the updated form data
+            const { totalAccounts, totalAmounts } = calculateTotals(updatedFormData);
+            updatedFormData['TOTAL ACCOUNTS'] = totalAccounts;
+            updatedFormData['TOTAL AMOUNTS'] = totalAmounts;
+            updatedFormData['GRAND TOTAL AC'] = totalAccounts;
+            updatedFormData['GRAND TOTAL AMT'] = totalAmounts;
 
-    setFormData(newFormData);
-    setNotification(null); // Clear notification on input change
-  };
+            return updatedFormData;
+        });
+
+        setNotification(null); // Clear notification on input change
+    };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,28 +207,87 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
       return;
     }
 
+    // FIX: Corrected function call from convertDDMMYYYYtoYYYYMMDD to convertYYYYMMDDtoDDMMYYYY
     const formattedDate = convertYYYYMMDDtoDDMMYYYY(formData.date);
-    let totalAmount = Number(currentAchievement['GRAND TOTAL AMT']) || 0; // FIX: Explicitly cast to Number
-    let totalAccounts = Number(currentAchievement['GRAND TOTAL AC']) || 0; // FIX: Explicitly cast to Number
-    const metricSummary: string[] = [];
+    let totalAmount = Number(currentAchievement['GRAND TOTAL AMT']) || 0; 
+    let totalAccounts = Number(currentAchievement['GRAND TOTAL AC']) || 0; 
+    
+    const branchName = currentAchievement['BRANCH NAME'] || 'N/A';
+    let staffRoleLine = '';
+    if (user.designation === 'BRANCH MANAGER' || user.designation === 'SENIOR BRANCH MANAGER') {
+        staffRoleLine = `BM - ${user.staffName}`;
+    } else {
+        staffRoleLine = `Staff - ${user.staffName}`;
+    }
 
-    // FIX: Iterate through all relevant number metrics (excluding totals) to build summary
-    ALL_DAILY_ACHIEVEMENT_NUMBER_METRICS.filter(metric => !metric.includes('TOTAL') && !metric.includes('GRAND TOTAL')).forEach(metric => {
-        const value = Number(currentAchievement[metric as keyof DailyAchievementRecord]) || 0; // FIX: Explicitly cast to Number()
-        if (value > 0) { // Only include metrics with positive values
-            metricSummary.push(`*${metric}:* ${value.toLocaleString('en-IN')}`);
+    // Helper to format numbers without decimals and with commas, matching the example's style
+    const formatShareNumber = (value: number) => value.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+    const shareMetrics: { [key: string]: { amt: number; ac: number } } = {
+        'SS': { amt: 0, ac: 0 },
+        'CG': { amt: 0, ac: 0 },
+        'CW': { amt: 0, ac: 0 },
+        'DD': { amt: 0, ac: 0 },
+        'RD': { amt: 0, ac: 0 },
+        'SMBG': { amt: 0, ac: 0 },
+        'FD': { amt: 0, ac: 0 },
+        'DAM/MIS': { amt: 0, ac: 0 }, // Combined
+        'INSU': { amt: 0, ac: 0 },
+        'TASC': { amt: 0, ac: 0 },
+        'SHARE': { amt: 0, ac: 0 },
+        'NEW AGENT': { amt: 0, ac: 0 }, // New entry
+    };
+
+    // Map full metric names to short codes and aggregate values
+    const metricMapping: { [key: string]: string } = {
+        'SAVS-AMT': 'SS', 'SAVS-AC': 'SS',
+        'CUR-GOLD-AMT': 'CG', 'CUR-GOLD-AC': 'CG',
+        'CUR-WEL-AMT': 'CW', 'CUR-WEL-AC': 'CW',
+        'DDS AMT': 'DD', 'DDS AC': 'DD',
+        'RD AMT': 'RD', 'RD AC': 'RD',
+        'SMBG AMT': 'SMBG', 'SMBG AC': 'SMBG',
+        'FD AMT': 'FD', 'FD AC': 'FD',
+        'DAM AMT': 'DAM/MIS', 'DAM AC': 'DAM/MIS',
+        'MIS AMT': 'DAM/MIS', 'MIS AC': 'DAM/MIS',
+        'INSU AMT': 'INSU', 'INSU AC': 'INSU',
+        'TASC AMT': 'TASC', 'TASC AC': 'TASC',
+        'SHARE AMT': 'SHARE', 'SHARE AC': 'SHARE',
+        'NEW-SS/AGNT': 'NEW AGENT', // Changed from 'SS' to new category
+    };
+
+    // Iterate over the currentAchievement metrics to populate shareMetrics
+    for (const fullMetricName of Object.keys(currentAchievement)) {
+        const shortCode = metricMapping[fullMetricName];
+        if (shortCode) {
+            const value = Number(currentAchievement[fullMetricName as keyof DailyAchievementRecord]) || 0;
+            if (fullMetricName.endsWith('AMT')) {
+                shareMetrics[shortCode].amt += value;
+            } else if (fullMetricName.endsWith('AC') || fullMetricName === 'NEW-SS/AGNT') {
+                shareMetrics[shortCode].ac += value;
+            }
         }
-    });
+    }
 
-    const message = `*Daily Achievement Report*\n\n` +
-                    `*Staff Name:* ${user.staffName}\n` +
-                    `*Branch Name:* ${currentAchievement['BRANCH NAME'] || 'N/A'}\n` +
-                    `*Date:* ${formattedDate}\n\n` +
-                    `*Summary:*\n` +
-                    `Total Achieved Amount: ₹${totalAmount.toLocaleString('en-IN')}\n` +
-                    `Total Achieved Accounts: ${totalAccounts.toLocaleString('en-IN')}\n\n` +
-                    (metricSummary.length > 0 ? `*Metrics Breakdown:*\n${metricSummary.join('\n')}\n\n` : '') +
-                    `_Generated by Daily Reporting App_`;
+    // Build the metric lines in the specified order
+    const metricLines: string[] = [];
+    const orderedShortCodes = ['SS', 'CG', 'CW', 'DD', 'RD', 'SMBG', 'FD', 'DAM/MIS', 'INSU', 'TASC', 'SHARE', 'NEW AGENT'];
+    for (const code of orderedShortCodes) {
+        const data = shareMetrics[code];
+        if (code === 'NEW AGENT') {
+            // NEW AGENT is just an account count, no amount
+            metricLines.push(`NEW AGENT:- ${formatShareNumber(data.ac)}`);
+        } else {
+            metricLines.push(`${code}:- ${formatShareNumber(data.amt)}/- AC:- ${formatShareNumber(data.ac)}`);
+        }
+    }
+
+    const message = `DAILY ACHIEVEMENT REPORT\n\n` +
+                    `DATE: ${formattedDate}\n\n` +
+                    `BRANCH: ${branchName}\n` +
+                    `${staffRoleLine}\n\n` +
+                    `${metricLines.join('\n')}\n\n` +
+                    `TOTAL AC:- ${formatShareNumber(totalAccounts)}\n` +
+                    `TOTAL AMT:- ${formatShareNumber(totalAmount)}`;
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
@@ -335,57 +402,12 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
     reader.readAsArrayBuffer(file);
     event.target.value = ''; // Clear input to allow re-uploading the same file
   };
+  
+    const productPrefixes = [
+    'DDS', 'DAM', 'MIS', 'FD', 'RD', 'SMBG', 'CUR-GOLD', 'CUR-WEL', 'SAVS', 'INSU', 'TASC', 'SHARE'
+  ];
+  const standaloneMetrics = ['NEW-SS/AGNT'];
 
-  const renderInputField = (name: string) => {
-    // Determine if it's a calculated total field
-    const isTotalField = name.includes('TOTAL') || name.includes('GRAND TOTAL');
-    const isGrandTotalField = name.includes('GRAND TOTAL');
-
-    return (
-      <div key={name}>
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          {name}
-        </label>
-        <input
-          type={isTotalField ? 'text' : 'number'} // Total fields are text (read-only)
-          id={name}
-          name={name}
-          value={
-            isTotalField
-              ? (Number(formData[name]) || 0).toLocaleString('en-IN') // Format calculated totals
-              : (formData[name] === undefined || formData[name] === null || formData[name] === '' ? '' : parseFloat(String(formData[name])).toFixed(0)) // Ensure integer input for others, empty string if no value
-          }
-          onChange={isTotalField ? () => {} : handleInputChange} // Only allow change for non-total fields
-          readOnly={isTotalField} // Make total fields read-only
-          disabled={isTotalField || isSubmitting} // Disable during submission
-          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm sm:text-sm
-                      ${isTotalField ? 'bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 cursor-not-allowed font-bold' : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500'}
-                      ${isGrandTotalField ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}
-                      ${notification?.type === 'error' ? 'border-red-500' : ''}`}
-          min="0"
-          placeholder="0"
-          aria-label={name}
-        />
-      </div>
-    );
-  };
-
-  const renderProductMetrics = useMemo(() => {
-    // We want to render ALL_DAILY_ACHIEVEMENT_NUMBER_METRICS, as these are the fields in the interface.
-    // The PROJECTION_DEMAND_METRIC_NAMES are individual metrics, and then there are the total fields.
-    // Let's ensure the order is logical: individual metrics first, then totals.
-    
-    const individualMetrics = PROJECTION_DEMAND_METRIC_NAMES.filter(
-        metric => !metric.includes('TOTAL') && !metric.includes('GRAND TOTAL')
-    );
-    const totalMetrics = ALL_DAILY_ACHIEVEMENT_NUMBER_METRICS.filter(
-        metric => metric.includes('TOTAL') || metric.includes('GRAND TOTAL')
-    );
-
-    const allFieldsToRender = [...individualMetrics, ...totalMetrics];
-
-    return allFieldsToRender.map(renderInputField);
-  }, [formData, notification, isSubmitting]); // Re-render if formData or notification/submitting state changes
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -412,7 +434,7 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* --- General Info --- */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div>
             <label htmlFor="staffName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Staff Name
@@ -461,10 +483,107 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
         {/* --- Achievement Metrics --- */}
         <div className="space-y-6">
           <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">Achievement Metrics (Product Wise & Account Wise)</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {renderProductMetrics}
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+            {productPrefixes.map(prefix => {
+                const amtMetric = `${prefix} AMT`;
+                const acMetric = `${prefix} AC`;
+                return (
+                    <div key={prefix}>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {prefix}
+                        </label>
+                        <div className="mt-1 flex items-center gap-2">
+                            {/* Amount Input */}
+                            <div className="flex-1">
+                                <label htmlFor={amtMetric} className="sr-only">{amtMetric}</label>
+                                <input
+                                    type="number"
+                                    id={amtMetric}
+                                    name={amtMetric}
+                                    value={formData[amtMetric] ?? 0}
+                                    onChange={handleInputChange}
+                                    required
+                                    disabled={isSubmitting}
+                                    className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                    min="0"
+                                    placeholder="0"
+                                    aria-label={amtMetric}
+                                />
+                            </div>
+                            {/* Account Input */}
+                            <div className="flex-1">
+                                <label htmlFor={acMetric} className="sr-only">{acMetric}</label>
+                                <input
+                                    type="number"
+                                    id={acMetric}
+                                    name={acMetric}
+                                    value={formData[acMetric] ?? 0}
+                                    onChange={handleInputChange}
+                                    required
+                                    disabled={isSubmitting}
+                                    className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                    min="0"
+                                    placeholder="0"
+                                    aria-label={acMetric}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )
+            })}
+            {/* Render standalone metrics */}
+            {standaloneMetrics.map(metric => (
+                <div key={metric}>
+                    <label htmlFor={metric} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {metric}
+                    </label>
+                    <input
+                        type="number"
+                        id={metric}
+                        name={metric}
+                        value={formData[metric] ?? 0}
+                        onChange={handleInputChange}
+                        required
+                        disabled={isSubmitting}
+                        className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        min="0"
+                        placeholder="0"
+                        aria-label={metric}
+                    />
+                </div>
+            ))}
         </div>
+        {/* Grand Total section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div>
+                <label htmlFor="GRAND TOTAL AMT" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    GRAND TOTAL AMT
+                </label>
+                <input
+                    type="text"
+                    id="GRAND TOTAL AMT"
+                    name="GRAND TOTAL AMT"
+                    value={(Number(formData['GRAND TOTAL AMT']) || 0).toLocaleString('en-IN')}
+                    readOnly
+                    className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed font-bold text-indigo-700 dark:text-indigo-300"
+                />
+            </div>
+            <div>
+                <label htmlFor="GRAND TOTAL AC" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    GRAND TOTAL AC
+                </label>
+                <input
+                    type="text"
+                    id="GRAND TOTAL AC"
+                    name="GRAND TOTAL AC"
+                    value={(Number(formData['GRAND TOTAL AC']) || 0).toLocaleString('en-IN')}
+                    readOnly
+                    className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed font-bold text-indigo-700 dark:text-indigo-300"
+                />
+            </div>
+        </div>
+      </div>
+
 
         {/* --- Submission Button --- */}
         <div className="pt-5 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">

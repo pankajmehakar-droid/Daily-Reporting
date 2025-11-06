@@ -1,11 +1,11 @@
-import { StaffMember, Branch, Kra, ProductMetric, Projection, Demand, BranchTarget, CsvRecord, DemandRunRateResult, DailyAchievementRecord, CsvSummary, ParsedCsvData, User, DetailedMonthlyTargets, Designation, DesignationKRA, Zone, Region, District, TargetPeriodType } from '../types';
+
+import { StaffMember, Branch, Target, ProductMetric, Projection, Demand, BranchTarget, CsvRecord, DailyRunRateResult, DailyAchievementRecord, CsvSummary, ParsedCsvData, User, DetailedMonthlyTargets, Designation, DesignationTarget, Zone, Region, District, TargetPeriodType, Highlight } from './types';
 import { reinitializeAuth } from './authService'; // Now explicitly imported here
-import { FULL_STAFF_DATA as initialFullStaffData, MOCK_PROJECTION_DATA, MOCK_DEMAND_DATA, MOCK_BRANCH_TARGETS, MOCK_DAILY_ACHIEVEMENT_RECORDS, MOCK_KRA_DATA, MOCK_DESIGNATION_KRAS as initialDesignationKras, MOCK_ZONES as initialZones, MOCK_REGIONS as initialRegions, MOCK_DISTRICTS as initialDistricts } from '../data'; // Import canonical staff data and new mock data arrays
+import { FULL_STAFF_DATA as initialFullStaffData, MOCK_PROJECTION_DATA, MOCK_DEMAND_DATA, MOCK_BRANCH_TARGETS, MOCK_DAILY_ACHIEVEMENT_RECORDS, MOCK_TARGET_DATA, MOCK_DESIGNATION_TARGETS as initialDesignationTargets, MOCK_ZONES as initialZones, MOCK_REGIONS as initialRegions, MOCK_DISTRICTS as initialDistricts, MOCK_HIGHLIGHTS } from '../data'; // Import canonical staff data and new mock data arrays
 import { getDaysInMonth, getDaysRemainingInMonth, getTodayDateYYYYMMDD, getMonthString, convertDDMMYYYYtoYYYYMMDD, getYearString } from '../utils/dateHelpers'; // FIX: Added convertDDMMYYYYtoYYYYMMDD, getYearString
 
 // Admin user ID (must match the one in authService for preservation)
 export const ADMIN_USER_ID = 'admin-user-0'; // Exported ADMIN_USER_ID
-const ZONAL_MANAGER_USER_ID = 'zm-user-0'; // New ID for Zonal Manager
 
 // MOCK_STAFF is now initialized from the canonical FULL_STAFF_DATA and remains mutable.
 let MOCK_STAFF: StaffMember[] = initialFullStaffData.map((staff, index) => ({
@@ -36,25 +36,6 @@ if (!MOCK_STAFF.some(s => s.id === ADMIN_USER_ID)) {
         managedZones: [],
         managedBranches: [],
         reportsToEmployeeCode: undefined,
-        subordinates: [],
-    });
-}
-
-// Add a default Zonal Manager staff member if not already present
-if (!MOCK_STAFF.some(s => s.id === ZONAL_MANAGER_USER_ID)) {
-    MOCK_STAFF.push({
-        id: ZONAL_MANAGER_USER_ID,
-        zone: 'Zone-1',
-        region: 'Region-2', // Based on existing AMRAVATI data
-        branchName: 'AMRAVATI', // A primary branch for the ZM
-        employeeName: 'Zonal Manager',
-        employeeCode: 'ZM001',
-        function: 'ZONAL MANAGER', // Use Designation type
-        districtName: 'AMRAVATI',
-        contactNumber: '9876598763',
-        managedZones: ['Zone-1', 'Zone-2'], // Zonal Manager manages these zones
-        managedBranches: [],
-        reportsToEmployeeCode: 'ADMIN', // Example: ZM reports to Admin
         subordinates: [],
     });
 }
@@ -96,6 +77,7 @@ let MOCK_PRODUCT_METRICS: ProductMetric[] = [
 let MOCK_ZONES: Zone[] = [...initialZones];
 let MOCK_REGIONS: Region[] = [...initialRegions];
 let MOCK_DISTRICTS: District[] = [...initialDistricts];
+let MOCK_HIGHLIGHTS_DATA: Highlight[] = [...MOCK_HIGHLIGHTS];
 
 
 // Helper function to derive initial branches from staff list
@@ -151,11 +133,10 @@ const deriveBranchesFromStaff = (): Branch[] => {
 // It will be kept consistent with MOCK_STAFF via _buildHierarchyAndSyncStaff.
 let MOCK_BRANCHES: Branch[] = deriveBranchesFromStaff();
 
-// MOCK_KRA_DATA stores Key Result Area targets
-// It's already imported from data.ts so no `let` declaration here.
+let MOCK_TARGETS: Target[] = [...MOCK_TARGET_DATA];
 
-// New: MOCK_DESIGNATION_KRAS for storing KRA definitions per designation
-let MOCK_DESIGNATION_KRAS: DesignationKRA[] = [...initialDesignationKras];
+// New: MOCK_DESIGNATION_TARGETS for storing Target definitions per designation
+let MOCK_DESIGNATION_TARGETS: DesignationTarget[] = [...initialDesignationTargets];
 
 
 /**
@@ -334,8 +315,6 @@ const _buildHierarchyAndSyncStaff = () => {
     reinitializeAuth(MOCK_STAFF); // Finally, reinitialize auth after all sync with the current MOCK_STAFF
 };
 
-// Removed: _buildHierarchyAndSyncStaff(); // Removed immediate call
-
 // New: Function to initialize data and auth services once at app startup
 export const initializeDataAndAuthServices = () => {
     _buildHierarchyAndSyncStaff(); // This will now trigger reinitializeAuth(MOCK_STAFF)
@@ -354,6 +333,55 @@ export class BranchDeletionError extends Error {
 
 
 // --- Public API ---
+
+// NEW EXPORTED HELPER FUNCTION
+export const getUserScope = async (user: User): Promise<{ employeeCodes: Set<string>, branchNames: Set<string> }> => {
+    // This needs allStaff and allBranches, so it should fetch them.
+    const allStaffMembers = await getAllStaff();
+    const allBranches = await getBranches();
+
+    const relevantEmployeeCodes = new Set<string>();
+    const relevantBranchNames = new Set<string>();
+
+    if (user.role === 'admin') {
+        allStaffMembers.forEach(s => { if (s.employeeCode) relevantEmployeeCodes.add(s.employeeCode) });
+        allBranches.forEach(b => relevantBranchNames.add(b.branchName));
+        return { employeeCodes: relevantEmployeeCodes, branchNames: relevantBranchNames };
+    }
+    
+    // For non-admin, always include their own employee code if exists
+    if (user.employeeCode) {
+        relevantEmployeeCodes.add(user.employeeCode);
+    }
+
+    // Add all subordinates (and their subordinates) to the scope
+    const userStaffNode = allStaffMembers.find(s => s.id === user.id);
+    if (userStaffNode) {
+        const { employeeCodes: subCodes, branchNames: subBranches } = getRecursiveSubordinateInfo(userStaffNode, allStaffMembers);
+        subCodes.forEach(code => relevantEmployeeCodes.add(code));
+        subBranches.forEach(name => relevantBranchNames.add(name));
+    }
+
+
+    // Add branches from managedZones or managedBranches for multi-unit managers
+    if (user.designation.toUpperCase() === 'ZONAL MANAGER' && user.managedZones && user.managedZones.length > 0) {
+        allBranches.filter(b => user.managedZones!.includes(b.zone)).forEach(b => relevantBranchNames.add(b.branchName));
+    } else if ((user.designation.toUpperCase() === 'DISTRICT HEAD' || user.designation.toUpperCase() === 'ASSISTANT DISTRICT HEAD' || user.designation.toUpperCase().startsWith('TL-')) && user.managedBranches && user.managedBranches.length > 0) {
+        user.managedBranches.forEach(bName => relevantBranchNames.add(bName));
+    } else if (user.branchName && user.branchName !== 'N/A') {
+        // For regular users/branch managers, their direct branch is part of the scope
+        relevantBranchNames.add(user.branchName);
+    }
+
+    // Add staff from the determined relevant branches to the employee codes set
+    allStaffMembers.forEach(staff => {
+        if (staff.branchName && relevantBranchNames.has(staff.branchName) && staff.employeeCode) {
+            relevantEmployeeCodes.add(staff.employeeCode);
+        }
+    });
+
+    return { employeeCodes: relevantEmployeeCodes, branchNames: relevantBranchNames };
+}
 
 export const getStaffData = (): StaffMember[] => {
     return [...MOCK_STAFF];
@@ -389,7 +417,6 @@ export const addStaff = (staffData: Omit<StaffMember, 'id' | 'subordinates'>): P
             // Ensure districtName and contactNumber have defaults if not provided
             staffData.districtName = staffData.districtName || 'N/A';
             staffData.contactNumber = staffData.contactNumber || 'N/A';
-            staffData.reportsToEmployeeCode = staffData.reportsToEmployeeCode || undefined; // Ensure default for new field
 
             // Validate and enforce managed units consistency
             const isZonalManager = staffData.function.toUpperCase() === 'ZONAL MANAGER';
@@ -415,6 +442,8 @@ export const addStaff = (staffData: Omit<StaffMember, 'id' | 'subordinates'>): P
             const newStaff: StaffMember = {
                 ...staffData,
                 id: `staff-${Date.now()}`,
+                // Explicitly set reportsToEmployeeCode from staffData to ensure it's saved
+                reportsToEmployeeCode: staffData.reportsToEmployeeCode || undefined,
                 subordinates: [], // Initialize empty, will be populated by _buildHierarchyAndSyncStaff
             };
             MOCK_STAFF.push(newStaff);
@@ -497,11 +526,7 @@ export const updateStaff = (id: string, updateData: Partial<Omit<StaffMember, 'i
             updatedStaff.contactNumber = updatedStaff.contactNumber || 'N/A';
             updatedStaff.managedZones = updatedStaff.managedZones || [];
             updatedStaff.managedBranches = updatedStaff.managedBranches || [];
-            // FIX: Ensure reportsToEmployeeCode is explicitly set, if updateData.reportsToEmployeeCode is undefined, it means "No Manager" was selected
-            // Use updateData.reportsToEmployeeCode directly; if it's undefined, it will propagate.
-            updatedStaff.reportsToEmployeeCode = updateData.reportsToEmployeeCode !== undefined ? updateData.reportsToEmployeeCode : oldStaff.reportsToEmployeeCode;
-
-
+            
             // Validate and enforce managed units consistency based on updated function
             const isZonalManager = updatedStaff.function.toUpperCase() === 'ZONAL MANAGER';
             const isDistrictHead = updatedStaff.function.toUpperCase() === 'DISTRICT HEAD';
@@ -552,8 +577,8 @@ export const removeStaff = (id: string): Promise<void> => {
                     s.reportsToEmployeeCode = undefined;
                 }
             });
-            // Also remove any KRAs assigned to the removed staff
-            MOCK_KRA_DATA.splice(0, MOCK_KRA_DATA.length, ...MOCK_KRA_DATA.filter(k => k.staffEmployeeCode !== removedStaffCode));
+            // Also remove any Targets assigned to the removed staff
+            MOCK_TARGETS.splice(0, MOCK_TARGETS.length, ...MOCK_TARGETS.filter(k => k.staffEmployeeCode !== removedStaffCode));
 
             _buildHierarchyAndSyncStaff(); // Sync after staff change
             resolve();
@@ -575,8 +600,8 @@ export const removeMultipleStaff = (ids: string[]): Promise<void> => {
                     s.reportsToEmployeeCode = undefined;
                 }
             });
-            // Also remove any KRAs assigned to the removed staff
-            MOCK_KRA_DATA.splice(0, MOCK_KRA_DATA.length, ...MOCK_KRA_DATA.filter(k => !removedStaffCodes.includes(k.staffEmployeeCode)));
+            // Also remove any Targets assigned to the removed staff
+            MOCK_TARGETS.splice(0, MOCK_TARGETS.length, ...MOCK_TARGETS.filter(k => !removedStaffCodes.includes(k.staffEmployeeCode)));
 
 
             if (MOCK_STAFF.length < initialLength) {
@@ -591,7 +616,6 @@ export const removeAllStaff = (adminUserIdToKeep: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             const adminStaff = MOCK_STAFF.find(s => s.id === adminUserIdToKeep);
-            const zonalManagerStaff = MOCK_STAFF.find(s => s.id === ZONAL_MANAGER_USER_ID); // Preserve ZM too
 
             if (!adminStaff) {
                 console.warn('Error: Admin user not found to preserve during removeAllStaff. Clearing all staff.');
@@ -602,19 +626,10 @@ export const removeAllStaff = (adminUserIdToKeep: string): Promise<void> => {
                 adminStaff.managedBranches = [];
                 adminStaff.reportsToEmployeeCode = undefined; // Admin has no manager
                 MOCK_STAFF = [adminStaff];
-
-                if (zonalManagerStaff && zonalManagerStaff.id !== adminUserIdToKeep) {
-                    // If ZM is distinct from Admin, add them back
-                    zonalManagerStaff.managedZones = ['Zone-1', 'Zone-2']; // Reset ZM's managed zones
-                    zonalManagerStaff.managedBranches = [];
-                    zonalManagerStaff.reportsToEmployeeCode = adminStaff.employeeCode; // ZM reports to Admin
-                    MOCK_STAFF.push(zonalManagerStaff);
-                }
             }
-            // Clear all KRAs after staff reset
-            MOCK_KRA_DATA.splice(0, MOCK_KRA_DATA.length);
+            // Clear all Targets after staff reset
+            MOCK_TARGETS.splice(0, MOCK_TARGETS.length);
             _buildHierarchyAndSyncStaff(); // Sync after mass deletion
-            // reinitializeAuth(); // Moved inside _buildHierarchyAndSyncStaff
             resolve();
         }, 300);
     });
@@ -645,9 +660,6 @@ export const addBranch = (branchData: Omit<Branch, 'id'>): Promise<Branch> => {
             };
             MOCK_BRANCHES.push(newBranch);
             
-            // Removed logic to create/update staff for primary branch manager.
-            // Manager assignment is now handled via StaffManagementPage/UserManagement.
-            
             _buildHierarchyAndSyncStaff(); // Sync after branch change
             resolve(newBranch);
         }, 300);
@@ -660,10 +672,7 @@ export const addMultipleBranches = (branchesData: Omit<Branch, 'id'>[]): Promise
             let added = 0;
             let skipped = 0;
 
-            // Managers are no longer directly updated here from branch data.
-            // Their status as primary branch managers is derived in _buildHierarchyAndSyncStaff.
-
-            for (const branchData of branchesData) { // Use for...of for better loop control and potential early exit on error
+            for (const branchData of branchesData) {
                 const trimmedName = branchData.branchName.trim();
                 if (trimmedName && !existingBranchNames.has(trimmedName.toLowerCase())) {
                     // Validate zone, region, district against existing master data
@@ -676,7 +685,6 @@ export const addMultipleBranches = (branchesData: Omit<Branch, 'id'>[]): Promise
                         branchName: trimmedName, // Use trimmed name
                         id: `branch-${Date.now()}-${Math.random()}`,
                         districtName: branchData.districtName,
-                        // Ensure manager details and mobile number are set to N/A or defaults
                         branchManagerName: branchData.branchManagerName || 'N/A',
                         branchManagerCode: branchData.branchManagerCode || 'N/A',
                         mobileNumber: branchData.mobileNumber || 'N/A',
@@ -716,14 +724,9 @@ export const updateBranch = (id: string, updateData: Partial<Omit<Branch, 'id'>>
             if (updateData.region && !MOCK_REGIONS.some(r => r.name === updateData.region)) return reject(new Error(`Region "${updateData.region}" not found in master data.`));
             if (updateData.districtName && !MOCK_DISTRICTS.some(d => d.name === updateData.districtName)) return reject(new Error(`District "${updateData.districtName}" not found in master data.`));
 
-            // Manager assignment and mobile number are now derived/managed elsewhere.
-            // Preserve existing values if not explicitly updated in `updateData`.
             updatedBranch.branchManagerName = updateData.branchManagerName || oldBranch.branchManagerName;
             updatedBranch.branchManagerCode = updateData.branchManagerCode || oldBranch.branchManagerCode;
             updatedBranch.mobileNumber = updateData.mobileNumber || oldBranch.mobileNumber;
-
-            // Removed logic to demote old manager or promote new manager based on branch update.
-            // This is now handled by StaffManagementPage and _buildHierarchyAndSyncStaff.
 
             MOCK_BRANCHES[branchIndex] = updatedBranch;
             _buildHierarchyAndSyncStaff(); // Sync after branch change
@@ -743,7 +746,6 @@ export const removeBranch = (id: string): Promise<void> => {
             const branchToDelete = MOCK_BRANCHES[branchIndex];
             const assignedStaff = MOCK_STAFF.filter(staff => staff.branchName === branchToDelete.branchName);
 
-            // Special case: If the only staff assigned to this branch is its primary manager, delete both
             const isOnlyManagerLeft = assignedStaff.length === 1 && assignedStaff[0].employeeCode === branchToDelete.branchManagerCode;
 
             if (assignedStaff.length > 0 && !isOnlyManagerLeft) {
@@ -752,17 +754,14 @@ export const removeBranch = (id: string): Promise<void> => {
                 return reject(new BranchDeletionError(message, assignedStaff));
             }
             
-            // If only the primary manager is left, or no staff, proceed with deletion
             if (isOnlyManagerLeft) {
                 MOCK_STAFF = MOCK_STAFF.filter(s => s.employeeCode !== branchToDelete.branchManagerCode);
             }
 
             MOCK_BRANCHES.splice(branchIndex, 1);
-            // Also remove any branch targets associated with this branch
             MOCK_BRANCH_TARGETS.splice(0, MOCK_BRANCH_TARGETS.length, ...MOCK_BRANCH_TARGETS.filter(bt => bt.branchName !== branchToDelete.branchName));
 
             _buildHierarchyAndSyncStaff(); // Sync after branch change
-            // reinitializeAuth(); // Moved inside _buildHierarchyAndSyncStaff
             resolve();
         }, 300);
     });
@@ -771,8 +770,6 @@ export const removeBranch = (id: string): Promise<void> => {
 export const removeAllBranches = (): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            // First, check if any staff members are assigned to branches that are NOT the primary managers of those branches.
-            // Managers will be handled by demoting their function to 'BRANCH OFFICER' implicitly by _buildHierarchyAndSyncStaff.
             const staffAssignedToBranches = MOCK_STAFF.filter(staff => 
                 staff.branchName !== 'N/A' && MOCK_BRANCHES.some(b => b.branchName === staff.branchName) && staff.function.toUpperCase() !== 'BRANCH MANAGER'
             );
@@ -783,7 +780,6 @@ export const removeAllBranches = (): Promise<void> => {
                 return reject(new Error(message));
             }
             
-            // All staff who were primary branch managers should have their function changed to 'BRANCH OFFICER'
             MOCK_STAFF.forEach(staff => {
                 if (staff.function.toUpperCase() === 'BRANCH MANAGER') {
                     staff.function = 'BRANCH OFFICER';
@@ -792,7 +788,6 @@ export const removeAllBranches = (): Promise<void> => {
                     staff.region = 'N/A';
                     staff.districtName = 'N/A';
                 }
-                // Also clear any managed units for all staff and reportsTo
                 staff.managedZones = [];
                 staff.managedBranches = [];
                 staff.reportsToEmployeeCode = undefined;
@@ -801,121 +796,98 @@ export const removeAllBranches = (): Promise<void> => {
             MOCK_BRANCHES = [];
             MOCK_BRANCH_TARGETS.splice(0, MOCK_BRANCH_TARGETS.length); // Clear all branch targets as well
             _buildHierarchyAndSyncStaff(); // Sync after mass deletion
-            // reinitializeAuth(); // Moved inside _buildHierarchyAndSyncStaff
             resolve();
         }, 300);
     });
 };
 
 
-// --- KRA Functions ---
-export const getKrasForStaff = (staffEmployeeCode: string, periodType?: TargetPeriodType, period?: string): Promise<Kra[]> => {
+// --- Target Functions ---
+export const getTargetsForStaff = (staffEmployeeCode: string, periodType?: TargetPeriodType, period?: string): Promise<Target[]> => {
     return new Promise((resolve) => {
-        let kras = MOCK_KRA_DATA.filter(k => k.staffEmployeeCode === staffEmployeeCode);
+        let targets = MOCK_TARGETS.filter(k => k.staffEmployeeCode === staffEmployeeCode);
         if (periodType) {
-            kras = kras.filter(k => k.periodType === periodType);
+            targets = targets.filter(k => k.periodType === periodType);
         }
         if (period) {
-            kras = kras.filter(k => k.period === period);
+            targets = targets.filter(k => k.period === period);
         }
-        resolve(kras);
+        resolve(targets);
     });
 };
 
-export const getAllKras = (): Promise<Kra[]> => {
-    return Promise.resolve([...MOCK_KRA_DATA]);
+export const getAllTargets = (): Promise<Target[]> => {
+    return Promise.resolve([...MOCK_TARGETS]);
 };
 
-export const saveKra = (kraData: Omit<Kra, 'id'>): Promise<Kra> => {
+export const saveTarget = (targetData: Omit<Target, 'id'>): Promise<Target> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            // Check for existing KRA for the same staff, metric, period, and periodType to prevent duplicates
-            const existing = MOCK_KRA_DATA.find(k => 
-                k.staffEmployeeCode === kraData.staffEmployeeCode &&
-                k.metric === kraData.metric &&
-                k.period === kraData.period &&
-                k.periodType === kraData.periodType
+            const existing = MOCK_TARGETS.find(k => 
+                k.staffEmployeeCode === targetData.staffEmployeeCode &&
+                k.metric === targetData.metric &&
+                k.period === targetData.period &&
+                k.periodType === targetData.periodType
             );
 
             if (existing) {
-                return reject(new Error(`A KRA for "${kraData.metric}" already exists for this period and type. Please edit the existing one.`));
+                return reject(new Error(`A Target for "${targetData.metric}" already exists for this period and type. Please edit the existing one.`));
             }
 
-            const newKra: Kra = {
-                ...kraData,
-                id: `kra-${Date.now()}-${Math.random()}`
+            const newTarget: Target = {
+                ...targetData,
+                id: `target-${Date.now()}-${Math.random()}`
             };
-            MOCK_KRA_DATA.push(newKra);
-            resolve(newKra);
+            MOCK_TARGETS.push(newTarget);
+            resolve(newTarget);
         }, 300);
     });
 };
 
-export const updateKra = (id: string, updateData: Partial<Omit<Kra, 'id'>>): Promise<Kra> => {
+export const updateTarget = (id: string, updateData: Partial<Omit<Target, 'id'>>): Promise<Target> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            const kraIndex = MOCK_KRA_DATA.findIndex(k => k.id === id);
-            if (kraIndex === -1) {
-                return reject(new Error('KRA not found.'));
+            const targetIndex = MOCK_TARGETS.findIndex(k => k.id === id);
+            if (targetIndex === -1) {
+                return reject(new Error('Target not found.'));
             }
-            const updatedKra = { ...MOCK_KRA_DATA[kraIndex], ...updateData };
-            MOCK_KRA_DATA[kraIndex] = updatedKra;
-            resolve(updatedKra);
+            const updatedTarget = { ...MOCK_TARGETS[targetIndex], ...updateData };
+            MOCK_TARGETS[targetIndex] = updatedTarget;
+            resolve(updatedTarget);
         }, 300);
     });
 };
 
-export const deleteKra = (id: string): Promise<void> => {
+export const deleteTarget = (id: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            const kraIndex = MOCK_KRA_DATA.findIndex(k => k.id === id);
-            if (kraIndex === -1) {
-                return reject(new Error('KRA not found.'));
+            const targetIndex = MOCK_TARGETS.findIndex(k => k.id === id);
+            if (targetIndex === -1) {
+                return reject(new Error('Target not found.'));
             }
-            MOCK_KRA_DATA.splice(kraIndex, 1);
+            MOCK_TARGETS.splice(targetIndex, 1);
             resolve();
         }, 300);
     });
 };
 
-/**
- * Resets all application data: deletes all staff (except admin), all branches, all KRAs, and all product metrics.
- * @param adminUserIdToKeep The ID of the admin user to preserve.
- */
 export const resetAppData = (adminUserIdToKeep: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             try {
-                // 1. Preserve admin user and Zonal Manager user
                 const adminStaff = MOCK_STAFF.find(s => s.id === adminUserIdToKeep);
-                const zonalManagerStaff = MOCK_STAFF.find(s => s.id === ZONAL_MANAGER_USER_ID);
 
-                MOCK_STAFF = []; // Start with an empty staff list
+                MOCK_STAFF = []; 
 
                 if (adminStaff) {
-                    // Clean and add admin back
                     adminStaff.managedZones = [];
                     adminStaff.managedBranches = [];
                     adminStaff.reportsToEmployeeCode = undefined;
                     MOCK_STAFF.push(adminStaff);
                 }
 
-                if (zonalManagerStaff && zonalManagerStaff.id !== adminUserIdToKeep) {
-                    // Clean and add ZM back, ensuring they report to Admin
-                    zonalManagerStaff.managedZones = ['Zone-1', 'Zone-2']; // Default managed zones
-                    zonalManagerStaff.managedBranches = [];
-                    zonalManagerStaff.reportsToEmployeeCode = adminStaff?.employeeCode; // ZM reports to Admin
-                    MOCK_STAFF.push(zonalManagerStaff);
-                }
-
-
-                // 2. Clear all branches
                 MOCK_BRANCHES = [];
-
-                // 3. Clear all KRAs
-                MOCK_KRA_DATA.splice(0, MOCK_KRA_DATA.length);
-
-                // 4. Reset product metrics to default
+                MOCK_TARGETS.splice(0, MOCK_TARGETS.length);
                 MOCK_PRODUCT_METRICS = [
                     { id: 'prod-1', name: 'GRAND TOTAL AMT', category: 'GRAND TOTAL', type: 'Amount', unitOfMeasure: 'INR', contributesToOverallGoals: true },
                     { id: 'prod-2', name: 'GRAND TOTAL AC', category: 'GRAND TOTAL', type: 'Account', unitOfMeasure: 'Units', contributesToOverallGoals: true },
@@ -946,23 +918,17 @@ export const resetAppData = (adminUserIdToKeep: string): Promise<void> => {
                     { id: 'prod-27', name: 'SHARE AMT', category: 'SHARE', type: 'Amount', unitOfMeasure: 'INR', contributesToOverallGoals: true },
                     { id: 'prod-28', name: 'DDS Target', category: 'DDS', type: 'Account', unitOfMeasure: 'Units', contributesToOverallGoals: true }, // Added DDS Target
                 ];
-
-                // 5. Clear Projection and Demand data
                 MOCK_PROJECTION_DATA.splice(0, MOCK_PROJECTION_DATA.length);
                 MOCK_DEMAND_DATA.splice(0, MOCK_DEMAND_DATA.length);
-                MOCK_BRANCH_TARGETS.splice(0, MOCK_BRANCH_TARGETS.length); // Clear all branch targets
-                MOCK_DAILY_ACHIEVEMENT_RECORDS.splice(0, MOCK_DAILY_ACHIEVEMENT_RECORDS.length); // Clear daily achievements
-                MOCK_DESIGNATION_KRAS.splice(0, MOCK_DESIGNATION_KRAS.length); // Clear designation KRA mappings
-                MOCK_DESIGNATION_KRAS.push(...initialDesignationKras); // Re-add initial mappings
-                
-                // 6. Reset Zone, Region, District data to default
+                MOCK_BRANCH_TARGETS.splice(0, MOCK_BRANCH_TARGETS.length);
+                MOCK_DAILY_ACHIEVEMENT_RECORDS.splice(0, MOCK_DAILY_ACHIEVEMENT_RECORDS.length);
+                MOCK_DESIGNATION_TARGETS.splice(0, MOCK_DESIGNATION_TARGETS.length);
+                MOCK_DESIGNATION_TARGETS.push(...initialDesignationTargets); 
                 MOCK_ZONES = [...initialZones];
                 MOCK_REGIONS = [...initialRegions];
                 MOCK_DISTRICTS = [...initialDistricts];
 
-                // 7. Synchronize and reinitialize authentication
                 _buildHierarchyAndSyncStaff();
-                // reinitializeAuth(); // Moved inside _buildHierarchyAndSyncStaff
 
                 console.log('App data reset successfully. Admin user preserved.');
                 resolve();
@@ -970,7 +936,7 @@ export const resetAppData = (adminUserIdToKeep: string): Promise<void> => {
                 console.error('Error during resetAppData:', error);
                 reject(new Error('Failed to reset app data.'));
             }
-        }, 500); // Simulate network delay
+        }, 500);
     });
 };
 
@@ -1022,16 +988,12 @@ export const removeProductMetric = (id: string): Promise<void> => {
             if (metricIndex === -1) {
                 return reject(new Error('Product metric not found.'));
             }
-            // Store the metric before removing it
             const oldMetric = MOCK_PRODUCT_METRICS[metricIndex]; 
             MOCK_PRODUCT_METRICS.splice(metricIndex, 1);
-            // Also remove this metric from any DesignationKRA mappings
-            MOCK_DESIGNATION_KRAS.forEach(dkra => {
-                dkra.metricIds = dkra.metricIds.filter(metricId => metricId !== id);
+            MOCK_DESIGNATION_TARGETS.forEach(dtarget => {
+                dtarget.metricIds = dtarget.metricIds.filter(metricId => metricId !== id);
             });
-            // Also remove any KRAs using this metric
-            MOCK_KRA_DATA.splice(0, MOCK_KRA_DATA.length, ...MOCK_KRA_DATA.filter(k => k.metric !== oldMetric.name));
-            // Also remove any Branch Targets using this metric
+            MOCK_TARGETS.splice(0, MOCK_TARGETS.length, ...MOCK_TARGETS.filter(k => k.metric !== oldMetric.name));
             MOCK_BRANCH_TARGETS.splice(0, MOCK_BRANCH_TARGETS.length, ...MOCK_BRANCH_TARGETS.filter(bt => bt.metric !== oldMetric.name));
 
 
@@ -1040,53 +1002,53 @@ export const removeProductMetric = (id: string): Promise<void> => {
     });
 };
 
-// --- Designation KRA Functions ---
-export const getDesignationKras = (): Promise<DesignationKRA[]> => {
-    return Promise.resolve([...MOCK_DESIGNATION_KRAS]);
+// --- Designation Target Functions ---
+export const getDesignationTargets = (): Promise<DesignationTarget[]> => {
+    return Promise.resolve([...MOCK_DESIGNATION_TARGETS]);
 };
 
-export const getDesignationKraByDesignation = (designation: Designation): Promise<DesignationKRA | undefined> => {
-    return Promise.resolve(MOCK_DESIGNATION_KRAS.find(dkra => dkra.designation === designation));
+export const getDesignationTargetByDesignation = (designation: Designation): Promise<DesignationTarget | undefined> => {
+    return Promise.resolve(MOCK_DESIGNATION_TARGETS.find(dtarget => dtarget.designation === designation));
 };
 
-export const saveDesignationKra = (dkraData: Omit<DesignationKRA, 'id'>): Promise<DesignationKRA> => {
+export const saveDesignationTarget = (dtargetData: Omit<DesignationTarget, 'id'>): Promise<DesignationTarget> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            if (MOCK_DESIGNATION_KRAS.some(dkra => dkra.designation === dkraData.designation)) {
-                return reject(new Error(`KRA mapping for designation "${dkraData.designation}" already exists.`));
+            if (MOCK_DESIGNATION_TARGETS.some(dtarget => dtarget.designation === dtargetData.designation)) {
+                return reject(new Error(`Target mapping for designation "${dtargetData.designation}" already exists.`));
             }
-            const newDkra: DesignationKRA = {
-                ...dkraData,
-                id: `dkra-${Date.now()}`
+            const newDtarget: DesignationTarget = {
+                ...dtargetData,
+                id: `dtarget-${Date.now()}`
             };
-            MOCK_DESIGNATION_KRAS.push(newDkra);
-            resolve(newDkra);
+            MOCK_DESIGNATION_TARGETS.push(newDtarget);
+            resolve(newDtarget);
         }, 300);
     });
 };
 
-export const updateDesignationKra = (id: string, updateData: Partial<Omit<DesignationKRA, 'id'>>): Promise<DesignationKRA> => {
+export const updateDesignationTarget = (id: string, updateData: Partial<Omit<DesignationTarget, 'id'>>): Promise<DesignationTarget> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            const dkraIndex = MOCK_DESIGNATION_KRAS.findIndex(dkra => dkra.id === id);
-            if (dkraIndex === -1) {
-                return reject(new Error('Designation KRA mapping not found.'));
+            const dtargetIndex = MOCK_DESIGNATION_TARGETS.findIndex(dtarget => dtarget.id === id);
+            if (dtargetIndex === -1) {
+                return reject(new Error('Designation Target mapping not found.'));
             }
-            const updatedDkra = { ...MOCK_DESIGNATION_KRAS[dkraIndex], ...updateData };
-            MOCK_DESIGNATION_KRAS[dkraIndex] = updatedDkra;
-            resolve(updatedDkra);
+            const updatedDtarget = { ...MOCK_DESIGNATION_TARGETS[dtargetIndex], ...updateData };
+            MOCK_DESIGNATION_TARGETS[dtargetIndex] = updatedDtarget;
+            resolve(updatedDtarget);
         }, 300);
     });
 };
 
-export const removeDesignationKra = (id: string): Promise<void> => {
+export const removeDesignationTarget = (id: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            const dkraIndex = MOCK_DESIGNATION_KRAS.findIndex(dkra => dkra.id === id);
-            if (dkraIndex === -1) {
-                return reject(new Error('Designation KRA mapping not found.'));
+            const dtargetIndex = MOCK_DESIGNATION_TARGETS.findIndex(dtarget => dtarget.id === id);
+            if (dtargetIndex === -1) {
+                return reject(new Error('Designation Target mapping not found.'));
             }
-            MOCK_DESIGNATION_KRAS.splice(dkraIndex, 1);
+            MOCK_DESIGNATION_TARGETS.splice(dtargetIndex, 1);
             resolve();
         }, 300);
     });
@@ -1108,7 +1070,6 @@ export const getAllProjections = (): Promise<Projection[]> => {
 export const saveProjection = (projectionData: Omit<Projection, 'id'>): Promise<Projection> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            // Check for existing projection for the same staff, date, and metric
             const existing = MOCK_PROJECTION_DATA.find(p =>
                 p.staffEmployeeCode === projectionData.staffEmployeeCode &&
                 p.date === projectionData.date &&
@@ -1171,7 +1132,6 @@ export const getAllDemands = (): Promise<Demand[]> => {
 export const saveDemand = (demandData: Omit<Demand, 'id'>): Promise<Demand> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
-            // Check for existing demand for the same staff, date, and metric
             const existing = MOCK_DEMAND_DATA.find(d =>
                 d.staffEmployeeCode === demandData.staffEmployeeCode &&
                 d.date === demandData.date &&
@@ -1288,14 +1248,14 @@ export const deleteBranchTarget = (id: string): Promise<void> => {
     });
 };
 
-interface DemandRunRateParams {
+interface DailyRunRateParams {
     entityId: string; // employeeCode or branchName
     isBranch: boolean;
     currentMonth: string; // YYYY-MM
     achievementRecords: CsvRecord[];
 }
 
-const initializeDemandRunRateResult = (currentMonth: string): DemandRunRateResult => {
+const initializeDailyRunRateResult = (currentMonth: string): DailyRunRateResult => {
     const [year, month] = currentMonth.split('-').map(Number);
     const totalDaysInMonth = getDaysInMonth(year, month);
     const remainingDays = getDaysRemainingInMonth(new Date());
@@ -1314,29 +1274,22 @@ const initializeDemandRunRateResult = (currentMonth: string): DemandRunRateResul
     };
 };
 
-/**
- * Calculates demand run rate for a single staff member or a single branch.
- * @param params DemandRunRateParams
- * @returns DemandRunRateResult
- */
-export const calculateDemandRunRateForSingleEntity = async ({ entityId, isBranch, currentMonth, achievementRecords }: DemandRunRateParams): Promise<DemandRunRateResult> => {
-    const result = initializeDemandRunRateResult(currentMonth);
+export const calculateDailyRunRateForSingleEntity = async ({ entityId, isBranch, currentMonth, achievementRecords }: DailyRunRateParams): Promise<DailyRunRateResult> => {
+    const result = initializeDailyRunRateResult(currentMonth);
     
     const productMetrics = await getProductMetrics();
     const amountMetrics = productMetrics.filter(m => m.type === 'Amount' && m.name !== 'GRAND TOTAL AMT' && m.contributesToOverallGoals);
     const accountMetrics = productMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC' && m.name !== 'NEW-SS/AGNT' && m.contributesToOverallGoals);
-    const otherAccountMetrics = productMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT' && m.contributesToOverallGoals); // Special handling for NEW-SS/AGNT
+    const otherAccountMetrics = productMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT' && m.contributesToOverallGoals);
 
-    // 1. Calculate Monthly Targets
-    let targets: Kra[] | BranchTarget[] = [];
+    let targets: Target[] | BranchTarget[] = [];
     if (isBranch) {
         targets = await getBranchTargets(entityId, currentMonth);
     } else {
-        // Fetch only monthly KRA targets for run rate calculations
-        targets = await getKrasForStaff(entityId, 'monthly', currentMonth); // Explicitly request 'monthly' targets for the current month
+        targets = await getTargetsForStaff(entityId, 'monthly', currentMonth);
     }
 
-    const grandTotalAmtTarget = targets.find(t => t.metric === 'GRAND TOTAL AMT'); // Assuming these are already filtered for month
+    const grandTotalAmtTarget = targets.find(t => t.metric === 'GRAND TOTAL AMT');
     const grandTotalAcTarget = targets.find(t => t.metric === 'GRAND TOTAL AC');
 
     if (grandTotalAmtTarget) {
@@ -1355,15 +1308,14 @@ export const calculateDemandRunRateForSingleEntity = async ({ entityId, isBranch
             .reduce((sum, t) => sum + t.target, 0);
     }
 
-    // 2. Calculate MTD Achievements
     const todayYYYYMMDD = getTodayDateYYYYMMDD();
     const currentMonthRecords = achievementRecords.filter(record => {
-        const recordDateStr = record['DATE'] as string; // dd/mm/yyyy
+        const recordDateStr = record['DATE'] as string;
         if (!recordDateStr) return false;
         const [day, month, year] = recordDateStr.split('/').map(Number);
-        const recordMonth = getMonthString(new Date(year, month - 1, day)); // YYYY-MM
+        const recordMonth = getMonthString(new Date(year, month - 1, day));
         const recordDate = new Date(year, month - 1, day);
-        const todayDate = new Date(todayYYYYMMDD); // YYYY-MM-DD
+        const todayDate = new Date(todayYYYYMMDD);
         
         return recordMonth === currentMonth && recordDate <= todayDate;
     });
@@ -1372,13 +1324,12 @@ export const calculateDemandRunRateForSingleEntity = async ({ entityId, isBranch
     if (isBranch) {
         filteredAchievementRecords = filteredAchievementRecords.filter(record => String(record['BRANCH NAME']) === entityId);
     } else {
-        filteredAchievementRecords = filteredAchievementRecords.filter(record => String(record['STAFF NAME']).includes(entityId)); // Using includes for partial match from employeeCode
+        filteredAchievementRecords = filteredAchievementRecords.filter(record => String(record['STAFF NAME']).includes(entityId));
     }
 
     result.mtdAchievementAmount = filteredAchievementRecords.reduce((sum, record) => sum + (Number(record['GRAND TOTAL AMT']) || 0), 0);
     result.mtdAchievementAccount = filteredAchievementRecords.reduce((sum, record) => sum + (Number(record['GRAND TOTAL AC']) || 0), 0);
 
-    // 3. Calculate Remaining Targets and Daily Run Rate
     result.remainingTargetAmount = Math.max(0, result.monthlyTargetAmount - result.mtdAchievementAmount);
     result.remainingTargetAccount = Math.max(0, result.monthlyTargetAccount - result.mtdAchievementAccount);
 
@@ -1391,16 +1342,15 @@ export const calculateDemandRunRateForSingleEntity = async ({ entityId, isBranch
 };
 
 
-export const calculateDemandRunRateForOverall = async ({ currentMonth, achievementRecords }: { currentMonth: string; achievementRecords: CsvRecord[] }): Promise<DemandRunRateResult> => {
-    const result = initializeDemandRunRateResult(currentMonth);
+export const calculateDailyRunRateForOverall = async ({ currentMonth, achievementRecords }: { currentMonth: string; achievementRecords: CsvRecord[] }): Promise<DailyRunRateResult> => {
+    const result = initializeDailyRunRateResult(currentMonth);
 
     const productMetrics = await getProductMetrics();
     const amountMetrics = productMetrics.filter(m => m.type === 'Amount' && m.name !== 'GRAND TOTAL AMT' && m.contributesToOverallGoals);
     const accountMetrics = productMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC' && m.name !== 'NEW-SS/AGNT' && m.contributesToOverallGoals);
     const otherAccountMetrics = productMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT' && m.contributesToOverallGoals);
 
-    // 1. Calculate Overall Monthly Targets (sum of all branch targets)
-    const allBranchTargets = await getBranchTargets(undefined, currentMonth); // Get all branch targets for the month
+    const allBranchTargets = await getBranchTargets(undefined, currentMonth);
 
     const overallGrandTotalAmtTarget = allBranchTargets.find(t => t.metric === 'GRAND TOTAL AMT' && t.month === currentMonth);
     const overallGrandTotalAcTarget = allBranchTargets.find(t => t.metric === 'GRAND TOTAL AC' && t.month === currentMonth);
@@ -1421,15 +1371,14 @@ export const calculateDemandRunRateForOverall = async ({ currentMonth, achieveme
             .reduce((sum, t) => sum + t.target, 0);
     }
 
-    // 2. Calculate Overall MTD Achievements
     const todayYYYYMMDD = getTodayDateYYYYMMDD();
     const currentMonthRecords = achievementRecords.filter(record => {
-        const recordDateStr = record['DATE'] as string; // dd/mm/yyyy
+        const recordDateStr = record['DATE'] as string;
         if (!recordDateStr) return false;
         const [day, month, year] = recordDateStr.split('/').map(Number);
-        const recordMonth = getMonthString(new Date(year, month - 1, day)); // YYYY-MM
+        const recordMonth = getMonthString(new Date(year, month - 1, day));
         const recordDate = new Date(year, month - 1, day);
-        const todayDate = new Date(todayYYYYMMDD); // YYYY-MM-DD
+        const todayDate = new Date(todayYYYYMMDD);
 
         return recordMonth === currentMonth && recordDate <= todayDate;
     });
@@ -1437,7 +1386,6 @@ export const calculateDemandRunRateForOverall = async ({ currentMonth, achieveme
     result.mtdAchievementAmount = currentMonthRecords.reduce((sum, record) => sum + (Number(record['GRAND TOTAL AMT']) || 0), 0);
     result.mtdAchievementAccount = currentMonthRecords.reduce((sum, record) => sum + (Number(record['GRAND TOTAL AC']) || 0), 0);
 
-    // 3. Calculate Remaining Targets and Daily Run Rate
     result.remainingTargetAmount = Math.max(0, result.monthlyTargetAmount - result.mtdAchievementAmount);
     result.remainingTargetAccount = Math.max(0, result.monthlyTargetAccount - result.mtdAchievementAccount);
 
@@ -1449,103 +1397,61 @@ export const calculateDemandRunRateForOverall = async ({ currentMonth, achieveme
     return result;
 };
 
-
-/**
- * Calculates demand run rate dynamically based on the user's role and their assigned management scope.
- * This includes direct subordinates if the user has any.
- * @param user The current logged-in user.
- * @param currentMonth The current month in YYYY-MM format.
- * @param achievementRecords All achievement records for the calculations.
- * @returns DemandRunRateResult
- */
-export const calculateDemandRunRateForUserScope = async (user: User, currentMonth: string, achievementRecords: CsvRecord[]): Promise<DemandRunRateResult> => {
-    const allStaffMembers = await getAllStaff(); // Get the full staff list for hierarchy traversal
-    const allBranches = await getBranches(); // Get all branches for zone/branch lookup
+export const calculateDailyRunRateForUserScope = async (user: User, currentMonth: string, achievementRecords: CsvRecord[]): Promise<DailyRunRateResult> => {
+    const allStaffMembers = await getAllStaff();
+    const allBranches = await getBranches();
 
     if (user.role === 'admin') {
-        return calculateDemandRunRateForOverall({ currentMonth, achievementRecords });
+        return calculateDailyRunRateForOverall({ currentMonth, achievementRecords });
     }
 
-    const aggregatedResult: DemandRunRateResult = initializeDemandRunRateResult(currentMonth);
+    const aggregatedResult: DailyRunRateResult = initializeDailyRunRateResult(currentMonth);
 
-    // 1. Determine the scope of staff and branches
-    const relevantEmployeeCodes = new Set<string>();
-    const relevantBranchNames = new Set<string>();
+    const { employeeCodes: relevantEmployeeCodes, branchNames: relevantBranchNames } = await getUserScope(user);
 
-    // Include the current user's own employee code and primary branch (if they are a direct contributor or a primary branch manager)
-    if (user.employeeCode) {
-        relevantEmployeeCodes.add(user.employeeCode);
-    }
-    if (user.branchName && user.branchName !== 'N/A') {
-        // Only add primary branch if user is a direct contributor or manager of that branch
-        const userStaffRecord = allStaffMembers.find(s => s.id === user.id);
-        if (userStaffRecord && (userStaffRecord.function.toUpperCase().includes('MANAGER') || userStaffRecord.function.toUpperCase().includes('HEAD') || userStaffRecord.function.toUpperCase().startsWith('TL-') || user.role === 'user')) {
-             relevantBranchNames.add(user.branchName);
-        }
-    }
-
-
-    // Add all subordinates (and their subordinates) to the scope
-    const userStaffNode = allStaffMembers.find(s => s.id === user.id);
-    if (userStaffNode) {
-        const { employeeCodes: subCodes, branchNames: subBranches } = getRecursiveSubordinateInfo(userStaffNode, allStaffMembers);
-        subCodes.forEach(code => relevantEmployeeCodes.add(code));
-        subBranches.forEach(name => relevantBranchNames.add(name));
-    }
-
-
-    // Add branches from managedZones or managedBranches for multi-unit managers
-    if (user.designation.toUpperCase() === 'ZONAL MANAGER' && user.managedZones && user.managedZones.length > 0) {
-        allBranches.filter(b => user.managedZones!.includes(b.zone)).forEach(b => relevantBranchNames.add(b.branchName));
-    } else if ((user.designation.toUpperCase() === 'DISTRICT HEAD' || user.designation.toUpperCase() === 'ASSISTANT DISTRICT HEAD' || user.designation.toUpperCase().startsWith('TL-')) && user.managedBranches && user.managedBranches.length > 0) {
-        user.managedBranches.forEach(bName => relevantBranchNames.add(bName));
-    }
-
-    // If, after all considerations, no specific scope is determined, this might indicate an edge case or misconfiguration.
-    // In such cases, the aggregatedResult will remain at its initialized zero values.
     if (relevantEmployeeCodes.size === 0 && relevantBranchNames.size === 0) {
         return aggregatedResult;
     }
 
-    // 2. Aggregate Monthly Targets
     const productMetrics = await getProductMetrics();
     const amountMetrics = productMetrics.filter(m => m.type === 'Amount' && m.name !== 'GRAND TOTAL AMT' && m.contributesToOverallGoals);
     const accountMetrics = productMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC' && m.name !== 'NEW-SS/AGNT' && m.contributesToOverallGoals);
     const otherAccountMetrics = productMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT' && m.contributesToOverallGoals);
 
-    // Combine all relevant KRA targets from individual staff members
-    let totalKRAAmountTarget = 0;
-    let totalKRAAccountTarget = 0;
+    let totalTargetAmount = 0;
+    let totalTargetAccount = 0;
+
     for (const empCode of Array.from(relevantEmployeeCodes)) {
-        // Fetch only monthly KRA targets for run rate calculations
-        const staffKras = await getKrasForStaff(empCode, 'monthly', currentMonth);
+        const staffTargets = await getTargetsForStaff(empCode, 'monthly', currentMonth);
         
-        const staffGrandTotalAmtTarget = staffKras.find(t => t.metric === 'GRAND TOTAL AMT');
-        const staffGrandTotalAcTarget = staffKras.find(t => t.metric === 'GRAND TOTAL AC');
+        const staffGrandTotalAmtTarget = staffTargets.find(t => t.metric === 'GRAND TOTAL AMT');
+        const staffGrandTotalAcTarget = staffTargets.find(t => t.metric === 'GRAND TOTAL AC');
 
         if (staffGrandTotalAmtTarget) {
-            totalKRAAmountTarget += staffGrandTotalAmtTarget.target;
+            totalTargetAmount += staffGrandTotalAmtTarget.target;
         } else {
-            totalKRAAmountTarget += staffKras
+            totalTargetAmount += staffTargets
                 .filter(t => amountMetrics.some(m => m.name === t.metric))
                 .reduce((sum, t) => sum + t.target, 0);
         }
 
         if (staffGrandTotalAcTarget) {
-            totalKRAAccountTarget += staffGrandTotalAcTarget.target;
+            totalTargetAccount += staffGrandTotalAcTarget.target;
         } else {
-            totalKRAAccountTarget += staffKras
+            totalTargetAccount += staffTargets
                 .filter(t => (accountMetrics.some(m => m.name === t.metric) || otherAccountMetrics.some(m => m.name === t.metric)))
                 .reduce((sum, t) => sum + t.target, 0);
         }
+        
+        // This was missing from the original function
+        let tempTargetDdsAc = 0;
+        let tempTargetFdAc = 0;
+        tempTargetDdsAc += (staffTargets.find(t => t.metric === 'DDS AC')?.target || 0);
+        tempTargetFdAc += (staffTargets.find(t => t.metric === 'FD AC')?.target || 0);
     }
-    aggregatedResult.monthlyTargetAmount += totalKRAAmountTarget;
-    aggregatedResult.monthlyTargetAccount += totalKRAAccountTarget;
+    aggregatedResult.monthlyTargetAmount += totalTargetAmount;
+    aggregatedResult.monthlyTargetAccount += totalTargetAccount;
 
-    // Combine all relevant Branch Targets from managed branches (avoiding double-counting if individual KRAs already cover it)
-    // This is a simplification for the mock. In a real system, you might have specific rules for how branch targets and individual KRAs sum up.
-    // Here, we add branch targets only if no individual KRAs were found, or if they represent a separate, higher-level target.
-    // Or, more robustly, if the user's role is primarily a multi-unit manager, prioritize summing branch targets for their scope.
     if (relevantBranchNames.size > 0 && (user.designation.toUpperCase() === 'ZONAL MANAGER' || user.designation.toUpperCase() === 'DISTRICT HEAD' || user.designation.toUpperCase() === 'ASSISTANT DISTRICT HEAD' || user.designation.toUpperCase().startsWith('TL-'))) {
         let totalBranchTargetAmount = 0;
         let totalBranchTargetAccount = 0;
@@ -1571,37 +1477,17 @@ export const calculateDemandRunRateForUserScope = async (user: User, currentMont
                     .reduce((sum, t) => sum + t.target, 0);
             }
         }
-        // Add branch targets. If staff KRAs were also found for some of these, there might be double counting.
-        // A real system would have clear rules on precedence (e.g., if staff KRAs exist, don't use branch targets for those staff/metrics).
-        // For simplicity in mock: assume branch targets are "umbrella" targets.
-        // If relevantEmployeeCodes had targets, and also relevantBranchNames have targets, these might sum up.
-        // Let's decide a simple rule: if a role manages *units* (zones/branches), their primary target view should be the sum of those units' targets.
-        // If they *also* have individual KRAs, these contribute.
-        // The most robust way is to aggregate from the lowest level (individual staff KRAs) and then add any "uncovered" higher-level targets.
-        // For now, let's take a simple approach: sum all relevant staff KRAs, then sum all relevant branch targets separately.
-        // This *might* lead to overcounting if staff KRAs are direct components of branch targets, but it's simple.
-        // A better mock would be to:
-        // 1. Calculate sum of all staff KRAs in scope.
-        // 2. Calculate sum of all branch targets in scope.
-        // 3. The final target is MAX(sum of staff KRAs, sum of branch targets) or a more complex hierarchical sum/dedupe.
-        // For now, let's prioritize branch targets for multi-unit managers if they have managed units, and otherwise staff KRAs.
-        if (relevantBranchNames.size > 0 && (user.designation.toUpperCase() === 'ZONAL MANAGER' || user.designation.toUpperCase() === 'DISTRICT HEAD' || user.designation.toUpperCase() === 'ASSISTANT DISTRICT HEAD' || user.designation.toUpperCase().startsWith('TL-'))) {
-            aggregatedResult.monthlyTargetAmount = Math.max(aggregatedResult.monthlyTargetAmount, totalBranchTargetAmount);
-            aggregatedResult.monthlyTargetAccount = Math.max(aggregatedResult.monthlyTargetAccount, totalBranchTargetAccount);
-        }
+        aggregatedResult.monthlyTargetAmount = Math.max(aggregatedResult.monthlyTargetAmount, totalBranchTargetAmount);
+        aggregatedResult.monthlyTargetAccount = Math.max(aggregatedResult.monthlyTargetAccount, totalBranchTargetAccount);
     }
 
-
-    // 3. Filter Achievement Records by relevant scope
     const filteredAchievementRecords = achievementRecords.filter(record => {
         const staffNameInRecord = String(record['STAFF NAME']);
         const branchNameInRecord = String(record['BRANCH NAME']);
         const recordMonth = getMonthString(new Date(convertDDMMYYYYtoYYYYMMDD(String(record['DATE']))));
 
-        // Only consider records for the current month
         if (recordMonth !== currentMonth) return false;
 
-        // Check if the record belongs to any of the relevant employee codes or branches
         const isRelevantStaff = Array.from(relevantEmployeeCodes).some(empCode => staffNameInRecord.includes(empCode));
         const isRelevantBranch = Array.from(relevantBranchNames).some(bName => branchNameInRecord.includes(bName));
         
@@ -1629,10 +1515,8 @@ export const calculateDemandRunRateForUserScope = async (user: User, currentMont
     return aggregatedResult;
 };
 
-// New: Function to get detailed monthly targets for the user's scope
 export const getDetailedMonthlyTargetsForUserScope = async (user: User, currentMonth: string): Promise<DetailedMonthlyTargets> => {
-    const allStaffMembers = await getAllStaff();
-    const allBranches = await getBranches();
+    const { employeeCodes: relevantEmployeeCodes, branchNames: relevantBranchNames } = await getUserScope(user);
     const productMetrics = await getProductMetrics();
 
     let aggregatedTargets: DetailedMonthlyTargets = {
@@ -1641,81 +1525,39 @@ export const getDetailedMonthlyTargetsForUserScope = async (user: User, currentM
         ddsAc: 0,
         fdAc: 0,
     };
-
-    // Determine the scope of staff and branches
-    const relevantEmployeeCodes = new Set<string>();
-    const relevantBranchNames = new Set<string>();
-
-    if (user.role === 'admin') {
-        // Admin sees everything for overall calculation, sum all branch targets
-        allBranches.forEach(b => relevantBranchNames.add(b.branchName));
-    } else {
-        // For non-admin, always include their own employee code if exists
-        if (user.employeeCode) {
-            relevantEmployeeCodes.add(user.employeeCode);
-        }
-
-        // Add all subordinates (and their subordinates) to the scope
-        const userStaffNode = allStaffMembers.find(s => s.id === user.id);
-        if (userStaffNode) {
-            const { employeeCodes: subCodes, branchNames: subBranches } = getRecursiveSubordinateInfo(userStaffNode, allStaffMembers);
-            subCodes.forEach(code => relevantEmployeeCodes.add(code));
-            subBranches.forEach(name => relevantBranchNames.add(name));
-        }
-
-        // Add branches from managedZones or managedBranches for multi-unit managers
-        if (user.designation.toUpperCase() === 'ZONAL MANAGER' && user.managedZones && user.managedZones.length > 0) {
-            allBranches.filter(b => user.managedZones!.includes(b.zone)).forEach(b => relevantBranchNames.add(b.branchName));
-        } else if ((user.designation.toUpperCase() === 'DISTRICT HEAD' || user.designation.toUpperCase() === 'ASSISTANT DISTRICT HEAD' || user.designation.toUpperCase().startsWith('TL-')) && user.managedBranches && user.managedBranches.length > 0) {
-            user.managedBranches.forEach(bName => relevantBranchNames.add(bName));
-        } else if (user.branchName && user.branchName !== 'N/A') {
-            // For regular users/branch managers, their direct branch
-            relevantBranchNames.add(user.branchName);
-        }
-    }
     
-    // If no scope is determined for a non-admin, return zeros
-    if (user.role !== 'admin' && relevantEmployeeCodes.size === 0 && relevantBranchNames.size === 0) {
-        return aggregatedTargets;
-    }
-
-
-    // Aggregate KRA Targets for relevant staff
-    let tempKRAAmount = 0;
-    let tempKRAAccount = 0;
-    let tempKRADdsAc = 0;
-    let tempKRAFdAc = 0;
+    let tempTargetAmount = 0;
+    let tempTargetAccount = 0;
+    // FIX: Declare missing variables
+    let tempTargetDdsAc = 0;
+    let tempTargetFdAc = 0;
 
     for (const empCode of Array.from(relevantEmployeeCodes)) {
-        // Fetch only monthly KRA targets for detailed monthly targets
-        const staffKras = await getKrasForStaff(empCode, 'monthly', currentMonth);
+        const staffTargets = await getTargetsForStaff(empCode, 'monthly', currentMonth);
         
-        // Prioritize specific grand totals if available, otherwise sum individuals
-        const staffGrandTotalAmtTarget = staffKras.find(t => t.metric === 'GRAND TOTAL AMT');
-        const staffGrandTotalAcTarget = staffKras.find(t => t.metric === 'GRAND TOTAL AC');
+        const staffGrandTotalAmtTarget = staffTargets.find(t => t.metric === 'GRAND TOTAL AMT');
+        const staffGrandTotalAcTarget = staffTargets.find(t => t.metric === 'GRAND TOTAL AC');
 
         if (staffGrandTotalAmtTarget) {
-            tempKRAAmount += staffGrandTotalAmtTarget.target;
+            tempTargetAmount += staffGrandTotalAmtTarget.target;
         } else {
-            tempKRAAmount += staffKras
+            tempTargetAmount += staffTargets
                 .filter(t => productMetrics.some(m => m.name === t.metric && m.type === 'Amount' && m.name !== 'GRAND TOTAL AMT'))
                 .reduce((sum, t) => sum + t.target, 0);
         }
 
         if (staffGrandTotalAcTarget) {
-            tempKRAAccount += staffGrandTotalAcTarget.target;
+            tempTargetAccount += staffGrandTotalAcTarget.target;
         } else {
-            tempKRAAccount += staffKras
+            tempTargetAccount += staffTargets
                 .filter(t => productMetrics.some(m => m.name === t.metric && m.type === 'Account' && m.name !== 'GRAND TOTAL AC') || (productMetrics.some(m => m.name === t.metric && m.type === 'Other' && m.name === 'NEW-SS/AGNT')))
                 .reduce((sum, t) => sum + t.target, 0);
         }
         
-        // Specific metrics
-        tempKRADdsAc += (staffKras.find(t => t.metric === 'DDS AC')?.target || 0);
-        tempKRAFdAc += (staffKras.find(t => t.metric === 'FD AC')?.target || 0);
+        tempTargetDdsAc += (staffTargets.find(t => t.metric === 'DDS AC')?.target || 0);
+        tempTargetFdAc += (staffTargets.find(t => t.metric === 'FD AC')?.target || 0);
     }
 
-    // Aggregate Branch Targets for relevant branches
     let tempBranchAmount = 0;
     let tempBranchAccount = 0;
     let tempBranchDdsAc = 0;
@@ -1743,31 +1585,25 @@ export const getDetailedMonthlyTargetsForUserScope = async (user: User, currentM
                 .reduce((sum, t) => sum + t.target, 0);
         }
 
-        // Specific metrics
         tempBranchDdsAc += (branchTargetsForMonth.find(t => t.metric === 'DDS AC')?.target || 0);
         tempBranchFdAc += (branchTargetsForMonth.find(t => t.metric === 'FD AC')?.target || 0);
     }
     
-    // Final aggregation logic:
-    // For Admin: Sum of all branch targets found in scope (which is all branches for admin)
     if (user.role === 'admin') {
         aggregatedTargets.totalAmount = tempBranchAmount;
         aggregatedTargets.totalAc = tempBranchAccount;
         aggregatedTargets.ddsAc = tempBranchDdsAc;
         aggregatedTargets.fdAc = tempBranchFdAc;
     } else if (user.role === 'manager') {
-        // Manager: Combine staff KRAs within their hierarchy and targets from managed branches/zones.
-        // This is a simplified sum. In a real system, you might have specific deduplication rules.
-        aggregatedTargets.totalAmount = tempKRAAmount + tempBranchAmount;
-        aggregatedTargets.totalAc = tempKRAAccount + tempBranchAccount;
-        aggregatedTargets.ddsAc = tempKRADdsAc + tempBranchDdsAc;
-        aggregatedTargets.fdAc = tempKRAFdAc + tempBranchFdAc;
+        aggregatedTargets.totalAmount = tempTargetAmount + tempBranchAmount;
+        aggregatedTargets.totalAc = tempTargetAccount + tempBranchAccount;
+        aggregatedTargets.ddsAc = tempTargetDdsAc + tempBranchDdsAc;
+        aggregatedTargets.fdAc = tempTargetFdAc + tempBranchFdAc;
     } else { // 'user' role
-        // User: Only their own KRA targets.
-        aggregatedTargets.totalAmount = tempKRAAmount;
-        aggregatedTargets.totalAc = tempKRAAccount;
-        aggregatedTargets.ddsAc = tempKRADdsAc;
-        aggregatedTargets.fdAc = tempKRAFdAc;
+        aggregatedTargets.totalAmount = tempTargetAmount;
+        aggregatedTargets.totalAc = tempTargetAccount;
+        aggregatedTargets.ddsAc = tempTargetDdsAc;
+        aggregatedTargets.fdAc = tempTargetFdAc;
     }
     
     return aggregatedTargets;
@@ -1831,15 +1667,13 @@ export const addMultipleDailyAchievementRecords = (recordsData: Omit<DailyAchiev
                 );
 
                 if (existingRecordIndex !== -1) {
-                    // Update existing record
                     MOCK_DAILY_ACHIEVEMENT_RECORDS[existingRecordIndex] = {
                         ...MOCK_DAILY_ACHIEVEMENT_RECORDS[existingRecordIndex],
                         ...newRecordData,
-                        id: MOCK_DAILY_ACHIEVEMENT_RECORDS[existingRecordIndex].id // Preserve existing ID
+                        id: MOCK_DAILY_ACHIEVEMENT_RECORDS[existingRecordIndex].id
                     };
                     updated++;
                 } else {
-                    // Add new record
                     const newRecord: DailyAchievementRecord = {
                         ...newRecordData,
                         id: `daily-ach-${Date.now()}-${Math.random()}`
@@ -1862,11 +1696,9 @@ export const clearDailyAchievementRecords = (): Promise<void> => {
     });
 };
 
-// Helper to transform raw daily achievement records to ParsedCsvData format
 export const transformDailyAchievementsToParsedCsvData = (records: DailyAchievementRecord[]): ParsedCsvData => {
     const rawRecords: CsvRecord[] = records.map(rec => {
         const { id, ...rest } = rec;
-        // Convert YYYY-MM-DD date to DD/MM/YYYY for compatibility with existing CSV parsing logic
         const [year, month, day] = rec.date.split('-');
         return {
             ...rest,
@@ -1909,7 +1741,7 @@ export const transformDailyAchievementsToParsedCsvData = (records: DailyAchievem
         if (record['STAFF NAME']) uniqueStaff.add(String(record['STAFF NAME']));
         if (record['BRANCH NAME']) uniqueBranches.add(String(record['BRANCH NAME']));
 
-        const dateStr = record['DATE'] as string; // DD/MM/YYYY
+        const dateStr = record['DATE'] as string;
         if (dateStr && /^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
             const [day, month, year] = dateStr.split('/').map(Number);
             const recordDate = new Date(year, month - 1, day);
@@ -1950,7 +1782,7 @@ export const addZone = (zoneData: Omit<Zone, 'id'>): Promise<Zone> => {
                 id: `zone-${Date.now()}`
             };
             MOCK_ZONES.push(newZone);
-            _buildHierarchyAndSyncStaff(); // Re-sync after adding a new organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve(newZone);
         }, 300);
     });
@@ -1970,7 +1802,14 @@ export const updateZone = (id: string, updateData: Partial<Omit<Zone, 'id'>>): P
             }
             const updatedZone = { ...oldZone, ...updateData };
             MOCK_ZONES[zoneIndex] = updatedZone;
-            _buildHierarchyAndSyncStaff(); // Re-sync after updating an organizational unit
+            
+            // Cascade name change to branches and staff
+            if (updateData.name && updateData.name !== oldZone.name) {
+                MOCK_BRANCHES.forEach(b => { if (b.zone === oldZone.name) b.zone = updatedZone.name; });
+                MOCK_STAFF.forEach(s => { if (s.zone === oldZone.name) s.zone = updatedZone.name; });
+            }
+
+            _buildHierarchyAndSyncStaff();
             resolve(updatedZone);
         }, 300);
     });
@@ -1985,21 +1824,18 @@ export const removeZone = (id: string): Promise<void> => {
             }
             const zoneToRemove = MOCK_ZONES[zoneIndex];
 
-            // Check if any branches are still assigned to this zone
+            if (MOCK_REGIONS.some(r => r.zoneId === id)) {
+                return reject(new Error(`Cannot delete zone "${zoneToRemove.name}" as regions are still assigned to it. Please reassign or delete regions first.`));
+            }
             if (MOCK_BRANCHES.some(b => b.zone === zoneToRemove.name)) {
                 return reject(new Error(`Cannot delete zone "${zoneToRemove.name}" as branches are still assigned to it. Please reassign or delete branches first.`));
             }
-            // Check if any staff (e.g., Zonal Managers) have this zone in their managedZones
             if (MOCK_STAFF.some(s => s.managedZones?.includes(zoneToRemove.name))) {
                 return reject(new Error(`Cannot delete zone "${zoneToRemove.name}" as staff members are still managing it. Please update staff assignments first.`));
             }
-            // Check if any regions are still assigned to this zone
-            if (MOCK_REGIONS.some(r => r.zoneId === zoneToRemove.id)) {
-                return reject(new Error(`Cannot delete zone "${zoneToRemove.name}" as regions are still assigned to it. Please reassign or delete regions first.`));
-            }
 
             MOCK_ZONES.splice(zoneIndex, 1);
-            _buildHierarchyAndSyncStaff(); // Re-sync after removing an organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve();
         }, 300);
     });
@@ -2016,7 +1852,6 @@ export const addRegion = (regionData: Omit<Region, 'id'>): Promise<Region> => {
             if (MOCK_REGIONS.some(r => r.name.toLowerCase() === regionData.name.toLowerCase())) {
                 return reject(new Error('Region name must be unique.'));
             }
-            // Validate zoneId if provided
             if (regionData.zoneId && !MOCK_ZONES.some(z => z.id === regionData.zoneId)) {
                 return reject(new Error(`Zone with ID "${regionData.zoneId}" not found.`));
             }
@@ -2026,7 +1861,7 @@ export const addRegion = (regionData: Omit<Region, 'id'>): Promise<Region> => {
                 id: `region-${Date.now()}`
             };
             MOCK_REGIONS.push(newRegion);
-            _buildHierarchyAndSyncStaff(); // Re-sync after adding an organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve(newRegion);
         }, 300);
     });
@@ -2044,14 +1879,19 @@ export const updateRegion = (id: string, updateData: Partial<Omit<Region, 'id'>>
                 MOCK_REGIONS.some(r => r.name.toLowerCase() === updateData.name?.toLowerCase() && r.id !== id)) {
                 return reject(new Error('Region name must be unique.'));
             }
-            // Validate zoneId if provided in update
             if (updateData.zoneId && !MOCK_ZONES.some(z => z.id === updateData.zoneId)) {
                 return reject(new Error(`Zone with ID "${updateData.zoneId}" not found.`));
             }
 
             const updatedRegion = { ...oldRegion, ...updateData };
             MOCK_REGIONS[regionIndex] = updatedRegion;
-            _buildHierarchyAndSyncStaff(); // Re-sync after updating an organizational unit
+
+            if (updateData.name && updateData.name !== oldRegion.name) {
+                MOCK_BRANCHES.forEach(b => { if (b.region === oldRegion.name) b.region = updatedRegion.name; });
+                MOCK_STAFF.forEach(s => { if (s.region === oldRegion.name) s.region = updatedRegion.name; });
+            }
+
+            _buildHierarchyAndSyncStaff();
             resolve(updatedRegion);
         }, 300);
     });
@@ -2066,21 +1906,15 @@ export const removeRegion = (id: string): Promise<void> => {
             }
             const regionToRemove = MOCK_REGIONS[regionIndex];
 
-            // Check if any branches are still assigned to this region
+            if (MOCK_DISTRICTS.some(d => d.regionId === id)) {
+                return reject(new Error(`Cannot delete region "${regionToRemove.name}" as districts are still assigned to it. Please reassign or delete districts first.`));
+            }
             if (MOCK_BRANCHES.some(b => b.region === regionToRemove.name)) {
                 return reject(new Error(`Cannot delete region "${regionToRemove.name}" as branches are still assigned to it. Please reassign or delete branches first.`));
             }
-            // Check if any districts are still assigned to this region
-            if (MOCK_DISTRICTS.some(d => d.regionId === regionToRemove.id)) {
-                return reject(new Error(`Cannot delete region "${regionToRemove.name}" as districts are still assigned to it. Please reassign or delete districts first.`));
-            }
-            // Check if any staff have this region in their primary region or managed branches/zones
-            if (MOCK_STAFF.some(s => s.region === regionToRemove.name || s.managedZones?.some(z => MOCK_ZONES.find(mz => mz.name === z)?.id === regionToRemove.zoneId) || s.managedBranches?.some(b => MOCK_BRANCHES.find(mb => mb.branchName === b)?.region === regionToRemove.name))) {
-                return reject(new Error(`Cannot delete region "${regionToRemove.name}" as staff or managed units are still associated with it. Please update staff/branch assignments first.`));
-            }
 
             MOCK_REGIONS.splice(regionIndex, 1);
-            _buildHierarchyAndSyncStaff(); // Re-sync after removing an organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve();
         }, 300);
     });
@@ -2097,7 +1931,6 @@ export const addDistrict = (districtData: Omit<District, 'id'>): Promise<Distric
             if (MOCK_DISTRICTS.some(d => d.name.toLowerCase() === districtData.name.toLowerCase())) {
                 return reject(new Error('District name must be unique.'));
             }
-            // Validate regionId if provided
             if (districtData.regionId && !MOCK_REGIONS.some(r => r.id === districtData.regionId)) {
                 return reject(new Error(`Region with ID "${districtData.regionId}" not found.`));
             }
@@ -2107,7 +1940,7 @@ export const addDistrict = (districtData: Omit<District, 'id'>): Promise<Distric
                 id: `district-${Date.now()}`
             };
             MOCK_DISTRICTS.push(newDistrict);
-            _buildHierarchyAndSyncStaff(); // Re-sync after adding an organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve(newDistrict);
         }, 300);
     });
@@ -2125,14 +1958,19 @@ export const updateDistrict = (id: string, updateData: Partial<Omit<District, 'i
                 MOCK_DISTRICTS.some(d => d.name.toLowerCase() === updateData.name?.toLowerCase() && d.id !== id)) {
                 return reject(new Error('District name must be unique.'));
             }
-            // Validate regionId if provided in update
             if (updateData.regionId && !MOCK_REGIONS.some(r => r.id === updateData.regionId)) {
                 return reject(new Error(`Region with ID "${updateData.regionId}" not found.`));
             }
 
             const updatedDistrict = { ...oldDistrict, ...updateData };
             MOCK_DISTRICTS[districtIndex] = updatedDistrict;
-            _buildHierarchyAndSyncStaff(); // Re-sync after updating an organizational unit
+
+            if (updateData.name && updateData.name !== oldDistrict.name) {
+                MOCK_BRANCHES.forEach(b => { if (b.districtName === oldDistrict.name) b.districtName = updatedDistrict.name; });
+                MOCK_STAFF.forEach(s => { if (s.districtName === oldDistrict.name) s.districtName = updatedDistrict.name; });
+            }
+
+            _buildHierarchyAndSyncStaff();
             resolve(updatedDistrict);
         }, 300);
     });
@@ -2147,18 +1985,47 @@ export const removeDistrict = (id: string): Promise<void> => {
             }
             const districtToRemove = MOCK_DISTRICTS[districtIndex];
 
-            // Check if any branches are still assigned to this district
             if (MOCK_BRANCHES.some(b => b.districtName === districtToRemove.name)) {
                 return reject(new Error(`Cannot delete district "${districtToRemove.name}" as branches are still assigned to it. Please reassign or delete branches first.`));
             }
-             // Check if any staff have this district in their primary district or managed units
-            if (MOCK_STAFF.some(s => s.districtName === districtToRemove.name || s.managedBranches?.some(b => MOCK_BRANCHES.find(mb => mb.branchName === b)?.districtName === districtToRemove.name))) {
-                return reject(new Error(`Cannot delete district "${districtToRemove.name}" as staff or managed units are still associated with it. Please update staff/branch assignments first.`));
-            }
 
             MOCK_DISTRICTS.splice(districtIndex, 1);
-            _buildHierarchyAndSyncStaff(); // Re-sync after removing an organizational unit
+            _buildHierarchyAndSyncStaff();
             resolve();
         }, 300);
     });
+};
+
+// --- Highlight Functions ---
+export const getHighlights = (): Promise<Highlight[]> => {
+  return Promise.resolve(
+    [...MOCK_HIGHLIGHTS_DATA].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  );
+};
+
+export const addHighlight = (highlightData: Omit<Highlight, 'id' | 'timestamp'>): Promise<Highlight> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const newHighlight: Highlight = {
+        ...highlightData,
+        id: `highlight-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+      };
+      MOCK_HIGHLIGHTS_DATA.push(newHighlight);
+      resolve(newHighlight);
+    }, 300);
+  });
+};
+
+export const removeHighlight = (id: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const index = MOCK_HIGHLIGHTS_DATA.findIndex(h => h.id === id);
+      if (index === -1) {
+        return reject(new Error('Highlight not found.'));
+      }
+      MOCK_HIGHLIGHTS_DATA.splice(index, 1);
+      resolve();
+    }, 300);
+  });
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, Projection, PROJECTION_DEMAND_METRIC_NAMES } from '../types';
 import { getProjectionsForStaff, saveProjection, updateProjection } from '../services/dataService';
 import { LoaderIcon, CheckCircleIcon, AlertTriangleIcon, Share2Icon } from '../components/icons';
@@ -27,6 +27,20 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
   const [error, setError] = useState<string | null>(null);
 
   const isMounted = useRef(false);
+
+  const { grandTotalAmount, grandTotalAccount } = useMemo(() => {
+    let totalAmount = 0;
+    let totalAccount = 0;
+    PROJECTION_DEMAND_METRIC_NAMES.forEach(metric => {
+        const value = Number(formData[metric]) || 0;
+        if (metric.includes('AMT')) {
+            totalAmount += value;
+        } else if (metric.includes('AC') || metric === 'NEW-SS/AGNT') {
+            totalAccount += value;
+        }
+    });
+    return { grandTotalAmount: totalAmount, grandTotalAccount: totalAccount };
+  }, [formData]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -68,7 +82,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value,
+      [name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value,
     }));
     // Clear error for this specific field if it was set
     setError(null);
@@ -83,16 +97,22 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
     
     try {
         const promises: Promise<Projection>[] = [];
+        
         PROJECTION_DEMAND_METRIC_NAMES.forEach(metric => {
-            const value = Number(formData[metric]) || 0; // Default to 0 if empty or invalid
             const existingProjection = currentProjections.find(p => p.metric === metric);
+            
+            // Only process if the metric has an existing projection or was touched in the form
+            if (existingProjection || formData.hasOwnProperty(metric)) {
+                const value = Number(formData[metric]) || 0;
 
-            if (value > 0) { // Only save/update if value is positive
                 if (existingProjection) {
-                    // Update existing projection
-                    promises.push(updateProjection(existingProjection.id, { value }));
+                    // Update if value is different
+                    if (existingProjection.value !== value) {
+                        promises.push(updateProjection(existingProjection.id, { value }));
+                    }
                 } else {
-                    // Save new projection
+                    // Create a new one since it was touched and didn't exist before.
+                    // This will save projections for 0 if the user explicitly interacted with the field.
                     promises.push(saveProjection({
                         staffEmployeeCode: user.employeeCode || '',
                         date: formData.date,
@@ -107,15 +127,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
         
         if (isMounted.current) {
             setSubmitSuccess(true);
-            // Re-fetch to update currentProjections and form values accurately
             await fetchCurrentProjections(user.employeeCode || '', formData.date);
-
-            // Redirect to ViewTodaysSubmittedReportPage after a short delay for notification to be visible
-            // setTimeout(() => {
-            //     if (isMounted.current) {
-            //         onNavigate('reports_today_submitted');
-            //     }
-            // }, 1000);
         }
     } catch (err) {
         if (isMounted.current) {
@@ -163,24 +175,10 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
     window.open(whatsappUrl, '_blank');
   };
 
-
-  const renderInputField = (name: string) => (
-    <div key={name}>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        {name}
-      </label>
-      <input
-        type="number"
-        id={name}
-        name={name}
-        value={formData[name] || ''} // Display empty string for 0 or undefined for better UX
-        onChange={handleInputChange}
-        className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-        min="0"
-        placeholder="0"
-      />
-    </div>
-  );
+  const productPrefixes = [
+    'DDS', 'DAM', 'MIS', 'FD', 'RD', 'SMBG', 'CUR-GOLD', 'CUR-WEL', 'SAVS', 'INSU', 'TASC', 'SHARE'
+  ];
+  const standaloneMetrics = ['NEW-SS/AGNT'];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -217,7 +215,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
         
         <form onSubmit={handleSubmit} className="space-y-8">
             {/* --- General Info --- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                  <div>
                     <label htmlFor="staffEmployeeCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Staff Name
@@ -227,6 +225,19 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
                         id="staffEmployeeCode"
                         name="staffEmployeeCode"
                         value={user.staffName}
+                        readOnly
+                        className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="branchName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Branch Name
+                    </label>
+                    <input
+                        type="text"
+                        id="branchName"
+                        name="branchName"
+                        value={user.branchName || 'N/A'}
                         readOnly
                         className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
                     />
@@ -250,8 +261,103 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
             {/* --- Projections --- */}
             <div className="space-y-6">
                 <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">Projections (Product Wise & Account Wise)</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {PROJECTION_DEMAND_METRIC_NAMES.map(renderInputField)}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+                    {productPrefixes.map(prefix => {
+                        const amtMetric = `${prefix} AMT`;
+                        const acMetric = `${prefix} AC`;
+                        
+                        return (
+                            <div key={prefix}>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    {prefix}
+                                </label>
+                                <div className="mt-1 flex items-center gap-2">
+                                    {/* Amount Input */}
+                                    <div className="flex-1">
+                                        <label htmlFor={amtMetric} className="sr-only">{amtMetric}</label>
+                                        <input
+                                            type="number"
+                                            id={amtMetric}
+                                            name={amtMetric}
+                                            value={formData[amtMetric] ?? 0}
+                                            onChange={handleInputChange}
+                                            required
+                                            className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                            min="0"
+                                            placeholder="0"
+                                            aria-label={amtMetric}
+                                        />
+                                    </div>
+                                    {/* Account Input */}
+                                    <div className="flex-1">
+                                        <label htmlFor={acMetric} className="sr-only">{acMetric}</label>
+                                        <input
+                                            type="number"
+                                            id={acMetric}
+                                            name={acMetric}
+                                            value={formData[acMetric] ?? 0}
+                                            onChange={handleInputChange}
+                                            required
+                                            className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                            min="0"
+                                            placeholder="0"
+                                            aria-label={acMetric}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                    {/* Render standalone metrics */}
+                    {standaloneMetrics.map(metric => (
+                        <div key={metric}>
+                            <label htmlFor={metric} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {metric}
+                            </label>
+                            <input
+                                type="number"
+                                id={metric}
+                                name={metric}
+                                value={formData[metric] ?? 0}
+                                onChange={handleInputChange}
+                                required
+                                className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                min="0"
+                                placeholder="0"
+                                aria-label={metric}
+                            />
+                        </div>
+                    ))}
+                </div>
+
+                {/* Grand Total section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div>
+                        <label htmlFor="GRAND TOTAL AMT" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            GRAND TOTAL AMT
+                        </label>
+                        <input
+                            type="text"
+                            id="GRAND TOTAL AMT"
+                            name="GRAND TOTAL AMT"
+                            value={grandTotalAmount.toLocaleString('en-IN')}
+                            readOnly
+                            className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed font-bold text-indigo-700 dark:text-indigo-300"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="GRAND TOTAL AC" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            GRAND TOTAL AC
+                        </label>
+                        <input
+                            type="text"
+                            id="GRAND TOTAL AC"
+                            name="GRAND TOTAL AC"
+                            value={grandTotalAccount.toLocaleString('en-IN')}
+                            readOnly
+                            className="mt-1 block w-full px-3 py-2 bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed font-bold text-indigo-700 dark:text-indigo-300"
+                        />
+                    </div>
                 </div>
             </div>
 

@@ -61,7 +61,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, onMenuToggle, onNavigat
             >
               <div className="text-right hidden sm:block flex-shrink-0">
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-150">{user.staffName}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.role}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.designation}</p>
               </div>
               
               {/* Avatar */}

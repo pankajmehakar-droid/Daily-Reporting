@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { User, StaffMember } from '../types';
 import { XIcon, UsersIcon } from './icons';
@@ -10,41 +9,20 @@ interface UserDetailModalProps {
 }
 
 const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, onClose, allStaff }) => {
-  const getLabelValue = (label: string, value: string | string[] | undefined) => {
-    if (Array.isArray(value)) {
-      return (
-        <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-2">
-          <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 w-32 sm:w-40">{label}</dt>
-          <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 flex-1">
-            {value.length > 0 ? value.join(', ') : 'N/A'}
-          </dd>
-        </div>
-      );
-    }
-    
-    // For reportsToEmployeeCode, display the manager's name if found
-    let displayValue: string | undefined = value as string; // Cast to string for initial assignment
-    if (label === "Reports To") {
-        if (value === undefined || value === "") { // Explicitly check for undefined or empty string
-            displayValue = 'N/A';
-        } else {
-            const manager = allStaff.find(s => s.employeeCode === value);
-            if (manager) {
-                displayValue = `${manager.employeeName} (${manager.employeeCode})`;
-            } else {
-                displayValue = `${value} (Unknown)`;
-            }
-        }
-    }
-
-    return (
-      <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-2">
-        <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 w-32 sm:w-40">{label}</dt>
-        <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 flex-1">{displayValue || 'N/A'}</dd>
-      </div>
-    );
+  
+  // A helper function to render each detail row consistently
+  const renderDetailItem = (label: string, content: React.ReactNode) => (
+    <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-2">
+      <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 w-32 sm:w-40 flex-shrink-0">{label}</dt>
+      <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 sm:mt-0 flex-1">{content}</dd>
+    </div>
+  );
+  
+  // Helper for simple text values that might be empty
+  const renderTextItem = (label: string, value: string | undefined | null) => {
+    return renderDetailItem(label, value || <span className="text-gray-400 italic">Not specified</span>);
   };
-
+  
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4" aria-modal="true" role="dialog">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
@@ -60,31 +38,43 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, onClose, allSta
           <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-md shadow-sm">
             <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mb-3">Basic Information</h4>
             <dl className="space-y-2">
-              {getLabelValue('Staff Name', user.staffName)}
-              {getLabelValue('Employee Code', user.employeeCode)}
-              {getLabelValue('Role', user.role)}
-              {getLabelValue('Designation', user.designation)}
-              {getLabelValue('Contact Number', user.contactNumber)}
+              {renderTextItem('Staff Name', user.staffName)}
+              {renderTextItem('Employee Code', user.employeeCode)}
+              {renderTextItem('Role', user.role)}
+              {renderTextItem('Designation', user.designation)}
+              {renderTextItem('Contact Number', user.contactNumber)}
             </dl>
           </div>
 
           <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-md shadow-sm">
             <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mb-3">Organizational Details</h4>
             <dl className="space-y-2">
-              {getLabelValue('Branch Name', user.branchName)}
-              {getLabelValue('District Name', user.districtName)}
-              {getLabelValue('Zone', user.zone)}
-              {getLabelValue('Region', user.region)}
+              {renderTextItem('Branch Name', user.branchName)}
+              {renderTextItem('District Name', user.districtName)}
+              {renderTextItem('Zone', user.zone)}
+              {renderTextItem('Region', user.region)}
             </dl>
           </div>
 
           <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-md shadow-sm">
             <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mb-3">Management & Reporting</h4>
             <dl className="space-y-2">
-              {getLabelValue('Managed Zones', user.managedZones)}
-              {getLabelValue('Managed Branches', user.managedBranches)}
-              {getLabelValue('Reports To', user.reportsToEmployeeCode)}
-              {getLabelValue('Subordinates', user.subordinates ? user.subordinates.length.toString() : '0')}
+              {renderDetailItem('Managed Zones', 
+                user.managedZones && user.managedZones.length > 0 
+                ? user.managedZones.join(', ') 
+                : <span className="text-gray-400 italic">None assigned</span>
+              )}
+              {renderDetailItem('Managed Branches', 
+                user.managedBranches && user.managedBranches.length > 0 
+                ? user.managedBranches.join(', ') 
+                : <span className="text-gray-400 italic">None assigned</span>
+              )}
+              {renderDetailItem('Reports To', 
+                user.reportsToEmployeeCode 
+                ? (allStaff.find(s => s.employeeCode === user.reportsToEmployeeCode)?.employeeName + ` (${user.reportsToEmployeeCode})` || `${user.reportsToEmployeeCode} (Unknown)`)
+                : <span className="text-gray-400 italic">No manager</span>
+              )}
+              {renderDetailItem('Subordinates', user.subordinates ? user.subordinates.length.toString() : '0')}
             </dl>
           </div>
         </div>
