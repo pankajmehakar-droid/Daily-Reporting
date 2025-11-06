@@ -156,6 +156,7 @@ export const MOCK_DAILY_ACHIEVEMENT_RECORDS: DailyAchievementRecord[] = [
   {
     id: 'ach-1',
     date: '2024-07-20',
+    priority: 'High',
     'STAFF NAME': 'PANKAJ MEHAKAR',
     'BRANCH NAME': 'NER',
     'DDS AMT': 150000, 'DAM AMT': 0, 'MIS AMT': 0, 'FD AMT': 500000, 'RD AMT': 0, 'SMBG AMT': 0, 'CUR-GOLD-AMT': 0, 'CUR-WEL-AMT': 0, 'SAVS-AMT': 20000, 'INSU AMT': 0, 'TASC AMT': 0, 'SHARE AMT': 0,
@@ -165,6 +166,7 @@ export const MOCK_DAILY_ACHIEVEMENT_RECORDS: DailyAchievementRecord[] = [
   {
     id: 'ach-2',
     date: '2024-07-21',
+    priority: 'Medium',
     'STAFF NAME': 'PANKAJ MEHAKAR',
     'BRANCH NAME': 'NER',
     'DDS AMT': 100000, 'DAM AMT': 0, 'MIS AMT': 0, 'FD AMT': 300000, 'RD AMT': 0, 'SMBG AMT': 0, 'CUR-GOLD-AMT': 0, 'CUR-WEL-AMT': 0, 'SAVS-AMT': 10000, 'INSU AMT': 0, 'TASC AMT': 0, 'SHARE AMT': 0,
@@ -174,6 +176,7 @@ export const MOCK_DAILY_ACHIEVEMENT_RECORDS: DailyAchievementRecord[] = [
   {
     id: 'ach-3',
     date: '2024-07-20',
+    priority: 'Low',
     'STAFF NAME': 'TRISHUL KOSHTI',
     'BRANCH NAME': 'NER',
     'DDS AMT': 50000, 'DAM AMT': 0, 'MIS AMT': 0, 'FD AMT': 0, 'RD AMT': 0, 'SMBG AMT': 0, 'CUR-GOLD-AMT': 0, 'CUR-WEL-AMT': 0, 'SAVS-AMT': 5000, 'INSU AMT': 0, 'TASC AMT': 0, 'SHARE AMT': 0,

@@ -105,14 +105,35 @@ const DataTable: React.FC<DataTableProps> = ({ headers, records, title, action, 
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredRecords.map((record, rowIndex) => (
                 <tr key={rowIndex} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  {headers.map((header) => (
-                    <td
-                      key={`${rowIndex}-${header}`}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300"
-                    >
-                      {record[header] ?? ''}
-                    </td>
-                  ))}
+                  {headers.map((header) => {
+                    const cellValue = record[header];
+                    let content: React.ReactNode = cellValue ?? '';
+
+                    if (header === 'Priority' && typeof cellValue === 'string') {
+                        const priority = cellValue as 'High' | 'Medium' | 'Low';
+                        let colorClasses = '';
+                        switch(priority.toLowerCase()) {
+                            case 'high': colorClasses = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; break;
+                            case 'medium': colorClasses = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'; break;
+                            case 'low': colorClasses = 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'; break;
+                            default: colorClasses = 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'; break;
+                        }
+                        content = (
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${colorClasses}`}>
+                            {priority}
+                            </span>
+                        );
+                    }
+                    
+                    return (
+                        <td
+                        key={`${rowIndex}-${header}`}
+                        className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300"
+                        >
+                        {content}
+                        </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

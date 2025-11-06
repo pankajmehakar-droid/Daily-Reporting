@@ -16,6 +16,7 @@ import RunRateBarChart from './RunRateBarChart';
 interface TargetAchievementAnalyticsProps {
   data: ParsedCsvData | null;
   user: User;
+  showRunRateAnalysis?: boolean;
 }
 
 const formatCurrency = (value: number) => {
@@ -38,7 +39,7 @@ const getProgressBarColor = (percentage: number) => {
   return 'bg-red-500';
 };
 
-const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({ data, user }) => {
+const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({ data, user, showRunRateAnalysis = true }) => {
   const [demandRunRate, setDemandRunRate] = useState<DailyRunRateResult | null>(null);
   const [loadingRunRate, setLoadingRunRate] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,8 +205,10 @@ const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({
 
   useEffect(() => {
     fetchMonthlyTargetVsAchievement();
-    fetchDailyRunRate();
-  }, [fetchMonthlyTargetVsAchievement, fetchDailyRunRate]);
+    if (showRunRateAnalysis) {
+      fetchDailyRunRate();
+    }
+  }, [fetchMonthlyTargetVsAchievement, fetchDailyRunRate, showRunRateAnalysis]);
 
 
   const renderTargetTable = () => {
@@ -274,61 +277,65 @@ const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({
         </div>
 
         {/* Current Month Daily Run Rate */}
-        {loadingRunRate ? (
-          <div className="flex justify-center items-center py-8"><LoaderIcon className="w-6 h-6" /></div>
-        ) : demandRunRate && (demandRunRate.monthlyTargetAmount > 0 || demandRunRate.monthlyTargetAccount > 0) ? (
-          <div>
-            <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Current Month Daily Run Rate ({currentMonth})</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard
-                title="Monthly Target Amount"
-                value={formatCurrency(demandRunRate.monthlyTargetAmount)}
-                icon={<DollarSignIcon className="w-6 h-6" />}
-                color="text-indigo-500"
-              />
-              <SummaryCard
-                title="MTD Achievement Amount"
-                value={formatCurrency(demandRunRate.mtdAchievementAmount)}
-                icon={<DollarSignIcon className="w-6 h-6" />}
-                color="text-green-500"
-              />
-              <SummaryCard
-                title="Remaining Target Amount"
-                value={formatCurrency(demandRunRate.remainingTargetAmount)}
-                icon={<DollarSignIcon className="w-6 h-6" />}
-                color="text-red-500"
-              />
-              <SummaryCard
-                title="Daily Run Rate (Amt)"
-                value={formatCurrency(demandRunRate.dailyRunRateAmount)}
-                icon={<DollarSignIcon className="w-6 h-6" />}
-                color="text-blue-500"
-              />
-            </div>
-            <div className="mt-6 flex flex-wrap justify-around">
-              <RunRateBarChart
-                monthlyTarget={demandRunRate.monthlyTargetAmount}
-                mtdAchievement={demandRunRate.mtdAchievementAmount}
-                dailyRunRate={demandRunRate.dailyRunRateAmount}
-                label="Amount"
-                unit="INR"
-              />
-              <RunRateBarChart
-                monthlyTarget={demandRunRate.monthlyTargetAccount}
-                mtdAchievement={demandRunRate.mtdAchievementAccount}
-                dailyRunRate={demandRunRate.dailyRunRateAccount}
-                label="Accounts"
-                unit="Units"
-              />
-            </div>
-            <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
-              Days Remaining in {currentMonth}: <span className="font-semibold">{demandRunRate.daysRemainingInMonth}</span>
-            </div>
-          </div>
-        ) : (
-             <p className="text-center text-gray-500 dark:text-gray-400 py-4">
-                No relevant targets or achievement data found for {currentMonth} to calculate daily run rate.
-            </p>
+        {showRunRateAnalysis && (
+          <>
+            {loadingRunRate ? (
+              <div className="flex justify-center items-center py-8"><LoaderIcon className="w-6 h-6" /></div>
+            ) : demandRunRate && (demandRunRate.monthlyTargetAmount > 0 || demandRunRate.monthlyTargetAccount > 0) ? (
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Current Month Daily Run Rate ({currentMonth})</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <SummaryCard
+                    title="Monthly Target Amount"
+                    value={formatCurrency(demandRunRate.monthlyTargetAmount)}
+                    icon={<DollarSignIcon className="w-6 h-6" />}
+                    color="text-indigo-500"
+                  />
+                  <SummaryCard
+                    title="MTD Achievement Amount"
+                    value={formatCurrency(demandRunRate.mtdAchievementAmount)}
+                    icon={<DollarSignIcon className="w-6 h-6" />}
+                    color="text-green-500"
+                  />
+                  <SummaryCard
+                    title="Remaining Target Amount"
+                    value={formatCurrency(demandRunRate.remainingTargetAmount)}
+                    icon={<DollarSignIcon className="w-6 h-6" />}
+                    color="text-red-500"
+                  />
+                  <SummaryCard
+                    title="Daily Run Rate (Amt)"
+                    value={formatCurrency(demandRunRate.dailyRunRateAmount)}
+                    icon={<DollarSignIcon className="w-6 h-6" />}
+                    color="text-blue-500"
+                  />
+                </div>
+                <div className="mt-6 flex flex-wrap justify-around">
+                  <RunRateBarChart
+                    monthlyTarget={demandRunRate.monthlyTargetAmount}
+                    mtdAchievement={demandRunRate.mtdAchievementAmount}
+                    dailyRunRate={demandRunRate.dailyRunRateAmount}
+                    label="Amount"
+                    unit="INR"
+                  />
+                  <RunRateBarChart
+                    monthlyTarget={demandRunRate.monthlyTargetAccount}
+                    mtdAchievement={demandRunRate.mtdAchievementAccount}
+                    dailyRunRate={demandRunRate.dailyRunRateAccount}
+                    label="Accounts"
+                    unit="Units"
+                  />
+                </div>
+                <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
+                  Days Remaining in {currentMonth}: <span className="font-semibold">{demandRunRate.daysRemainingInMonth}</span>
+                </div>
+              </div>
+            ) : (
+                 <p className="text-center text-gray-500 dark:text-gray-400 py-4">
+                    No relevant targets or achievement data found for {currentMonth} to calculate daily run rate.
+                </p>
+            )}
+          </>
         )}
       </div>
     </CollapsibleSection>

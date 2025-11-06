@@ -1,6 +1,7 @@
 
 
 export type Role = 'admin' | 'user' | 'manager';
+export type TaskPriority = 'High' | 'Medium' | 'Low';
 
 export interface User {
   id: string; // The underlying StaffMember ID
@@ -108,7 +109,7 @@ export interface CsvSummary {
   totalAc: number;
 }
 
-export type CsvRecord = Record<string, string | number>;
+export type CsvRecord = Record<string, string | number | undefined>;
 
 export interface ParsedCsvData {
   summary: CsvSummary;
@@ -185,6 +186,7 @@ export interface BranchTarget {
 export interface DailyAchievementRecord {
   id: string;
   date: string; // YYYY-MM-DD
+  priority?: TaskPriority;
   'STAFF NAME': string;
   'BRANCH NAME': string;
   'DDS AMT': number;
@@ -216,7 +218,7 @@ export interface DailyAchievementRecord {
   'TOTAL AMOUNTS': number;
   'GRAND TOTAL AC': number;
   'GRAND TOTAL AMT': number;
-  [key: string]: string | number;
+  [key: string]: string | number | undefined;
 }
 
 export interface DesignationTarget {

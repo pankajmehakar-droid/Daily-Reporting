@@ -187,7 +187,9 @@ export const UserManagementPage: React.FC<{ currentUser: User }> = ({ currentUse
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10); // Default items per page
-    const [searchTerm, setSearchTerm] = useState(''); // Moved searchTerm here
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedRoleFilter, setSelectedRoleFilter] = useState('all');
+    const [selectedDesignationFilter, setSelectedDesignationFilter] = useState('all');
 
     useEffect(() => {
       isMounted.current = true;
@@ -742,20 +744,44 @@ export const UserManagementPage: React.FC<{ currentUser: User }> = ({ currentUse
 
     // Filtered staff based on search term (before pagination)
     const filteredStaff = useMemo(() => {
-        setCurrentPage(1); // Reset page to 1 when search term changes
-        if (!searchTerm.trim()) {
-            return users;
-        }
-        const lowercasedTerm = searchTerm.toLowerCase();
-        return users.filter(user =>
-            Object.values(user).some(value => {
-                if (Array.isArray(value)) {
-                    return value.some(item => String(item).toLowerCase().includes(lowercasedTerm));
+        setCurrentPage(1); // Reset page to 1 when filters change
+        
+        let currentFilteredUsers = users;
+
+        // Apply role filter
+        if (selectedRoleFilter !== 'all') {
+            currentFilteredUsers = currentFilteredUsers.filter(user => {
+                const isManagerRole = user.designation.toUpperCase().includes('MANAGER') ||
+                                      user.designation.toUpperCase().includes('HEAD') ||
+                                      user.designation.toUpperCase().includes('TL');
+                if (selectedRoleFilter === 'manager') {
+                    return isManagerRole;
                 }
-                return String(value).toLowerCase().includes(lowercasedTerm)
-            })
-        );
-    }, [users, searchTerm]);
+                // if selectedRoleFilter === 'user'
+                return !isManagerRole;
+            });
+        }
+
+        // Apply designation filter
+        if (selectedDesignationFilter !== 'all') {
+            currentFilteredUsers = currentFilteredUsers.filter(user => user.designation === selectedDesignationFilter);
+        }
+        
+        // Apply search term filter
+        if (searchTerm.trim()) {
+            const lowercasedTerm = searchTerm.toLowerCase();
+            currentFilteredUsers = currentFilteredUsers.filter(user =>
+                Object.values(user).some(value => {
+                    if (Array.isArray(value)) {
+                        return value.some(item => String(item).toLowerCase().includes(lowercasedTerm));
+                    }
+                    return String(value).toLowerCase().includes(lowercasedTerm)
+                })
+            );
+        }
+
+        return currentFilteredUsers;
+    }, [users, searchTerm, selectedRoleFilter, selectedDesignationFilter]);
 
     // Pagination calculations
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -843,6 +869,33 @@ export const UserManagementPage: React.FC<{ currentUser: User }> = ({ currentUse
                             className="w-full sm:w-56 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                             aria-label="Search staff members"
                         />
+                    </div>
+                    <div className="w-full sm:w-auto">
+                        <label htmlFor="role-filter" className="sr-only">Filter by Role</label>
+                        <select
+                            id="role-filter"
+                            value={selectedRoleFilter}
+                            onChange={e => setSelectedRoleFilter(e.target.value)}
+                            className="w-full sm:w-48 px-4 py-2 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="all">All Roles</option>
+                            <option value="manager">Manager</option>
+                            <option value="user">User</option>
+                        </select>
+                    </div>
+                    <div className="w-full sm:w-auto">
+                        <label htmlFor="designation-filter" className="sr-only">Filter by Designation</label>
+                        <select
+                            id="designation-filter"
+                            value={selectedDesignationFilter}
+                            onChange={e => setSelectedDesignationFilter(e.target.value)}
+                            className="w-full sm:w-48 px-4 py-2 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="all">All Designations</option>
+                            {DESIGNATIONS.map(designation => (
+                                <option key={designation} value={designation}>{designation}</option>
+                            ))}
+                        </select>
                     </div>
                     {currentUser.role === 'admin' && ( // RBAC: Only admin can import
                         <button onClick={() => importFileInputRef.current?.click()} className="btn btn-blue"><UploadIcon className="w-5 h-5" />Import</button>

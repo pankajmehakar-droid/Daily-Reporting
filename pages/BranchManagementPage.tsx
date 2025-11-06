@@ -67,8 +67,8 @@ const validateForm = (
 
 
 export const BranchManagementPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
-    // RBAC: Restrict this page to admin users only
-    if (currentUser.role !== 'admin') {
+    // RBAC: Restrict this page to admin and manager users only
+    if (currentUser.role !== 'admin' && currentUser.role !== 'manager') {
         return (
             <div className="space-y-6">
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Branch Management</h2>
@@ -77,7 +77,7 @@ export const BranchManagementPage: React.FC<{ currentUser: User }> = ({ currentU
                         You do not have permission to view Branch Management.
                     </p>
                     <p className="text-gray-500 dark:text-gray-400 mt-2">
-                        This page is accessible only to Administrators.
+                        This page is accessible only to Administrators and Managers.
                     </p>
                 </div>
             </div>
@@ -650,14 +650,10 @@ export const BranchManagementPage: React.FC<{ currentUser: User }> = ({ currentU
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Branch Management</h2>
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* RBAC: Only Admin can import */}
                     <button onClick={handleImportClick} className="btn btn-blue"><UploadIcon className="w-5 h-5" />Import</button>
                     <input type="file" ref={importFileInputRef} onChange={handleFileImport} className="hidden" accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-                    {/* RBAC: Only Admin can export */}
                     <button onClick={handleExportBranches} className="btn btn-green"><FileDownIcon className="w-5 h-5" />Export</button>
-                    {/* RBAC: Only Admin can add branch */}
                     <button onClick={openModalForAdd} className="btn btn-indigo"><PlusIcon className="w-5 h-5" />Add Branch</button>
-                    {/* RBAC: Only Admin can delete all branches */}
                     <button onClick={() => setIsDeleteAllModalOpen(true)} className="btn btn-danger"><TrashIcon className="w-5 h-5" />Delete All</button>
                 </div>
             </div>

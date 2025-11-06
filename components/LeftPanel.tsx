@@ -81,10 +81,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isOpen, onClose, user, activePage
     { 
       title: 'Admin', 
       icon: LockIcon,
-      roles: ['admin'],
+      roles: ['admin', 'manager'],
       submenu: [
-        { title: 'User Management', icon: UsersIcon, page: 'usermanagement', roles: ['admin'] },
-        { title: 'Branch Management', icon: OfficeBuildingIcon, page: 'branchmanagement', roles: ['admin'] },
+        { title: 'User Management', icon: UsersIcon, page: 'usermanagement', roles: ['admin', 'manager'] },
+        { title: 'Branch Management', icon: OfficeBuildingIcon, page: 'branchmanagement', roles: ['admin', 'manager'] },
       ]
     },
     { 
@@ -96,12 +96,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isOpen, onClose, user, activePage
     { 
       title: 'Mappings', 
       icon: Share2Icon,
-      roles: ['admin'],
+      roles: ['admin', 'manager'],
       submenu: [
-        { title: 'Target Mapping', icon: TargetIcon, page: 'targetmapping', roles: ['admin'] },
-        { title: 'Manager Assignments', icon: UsersIcon, page: 'managerassignments', roles: ['admin'] },
-        { title: 'Staff Assignments', icon: UsersIcon, page: 'staffassignments', roles: ['admin'] },
-        { title: 'Branch Target Mapping', icon: TargetIcon, page: 'admin_target_branch', roles: ['admin'] },
+        { title: 'Target Mapping', icon: TargetIcon, page: 'targetmapping', roles: ['admin', 'manager'] },
+        { title: 'Manager Assignments', icon: UsersIcon, page: 'managerassignments', roles: ['admin', 'manager'] },
+        { title: 'Staff Assignments', icon: UsersIcon, page: 'staffassignments', roles: ['admin', 'manager'] },
+        { title: 'Branch Target Mapping', icon: TargetIcon, page: 'admin_target_branch', roles: ['admin', 'manager'] },
       ]
     },
     { 

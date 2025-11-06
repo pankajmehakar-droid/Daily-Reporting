@@ -38,6 +38,7 @@ import ProductMappingPage from './DesignationKraSettingsPage'; // New page
 import TargetAchievementAnalytics from '../components/TargetAchievementAnalytics'; // New component
 import HighlightUploadModal from '../components/HighlightUploadModal'; // New Import
 import { UploadIcon, TrashIcon, DollarSignIcon, UsersIcon, BotIcon, LoaderIcon } from '../components/icons';
+import RunRateBarChart from '../components/RunRateBarChart';
 
 // FIX: Declare XLSX from the global scope (assuming it's loaded via script tag in index.html)
 declare const XLSX: any;
@@ -210,10 +211,35 @@ const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedC
             {loadingRunRate ? (
                 <div className="flex justify-center py-8"><LoaderIcon /></div>
             ) : runRate ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <AchievementProgressBar title="MTD Amount Achievement" achieved={runRate.mtdAchievementAmount} target={runRate.monthlyTargetAmount} />
-                    <AchievementProgressBar title="MTD Account Achievement" achieved={runRate.mtdAchievementAccount} target={runRate.monthlyTargetAccount} />
-                </div>
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <AchievementProgressBar title="MTD Amount Achievement" achieved={runRate.mtdAchievementAmount} target={runRate.monthlyTargetAmount} />
+                        <AchievementProgressBar title="MTD Account Achievement" achieved={runRate.mtdAchievementAccount} target={runRate.monthlyTargetAccount} />
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+                        <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2 text-center">Daily Run Rate</h4>
+                        <div className="mt-6 flex flex-wrap justify-around">
+                            <RunRateBarChart
+                                monthlyTarget={runRate.monthlyTargetAmount}
+                                mtdAchievement={runRate.mtdAchievementAmount}
+                                dailyRunRate={runRate.dailyRunRateAmount}
+                                label="Amount"
+                                unit="INR"
+                            />
+                            <RunRateBarChart
+                                monthlyTarget={runRate.monthlyTargetAccount}
+                                mtdAchievement={runRate.mtdAchievementAccount}
+                                dailyRunRate={runRate.dailyRunRateAccount}
+                                label="Accounts"
+                                unit="Units"
+                            />
+                        </div>
+                        <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
+                            Days Remaining in {getMonthString()}: <span className="font-semibold">{runRate.daysRemainingInMonth}</span>
+                        </div>
+                    </div>
+                </>
             ) : (
                 <p className="text-center text-gray-500 dark:text-gray-400 py-4">
                     Monthly targets not set. Achievement progress cannot be displayed.
@@ -234,7 +260,7 @@ const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedC
                 </div>
             )}
             
-            <TargetAchievementAnalytics data={parsedCsvData} user={currentUser} />
+            <TargetAchievementAnalytics data={parsedCsvData} user={currentUser} showRunRateAnalysis={false} />
 
             {dailyPerformanceChartData.length > 0 && (
                 <BarChart
@@ -258,9 +284,12 @@ interface DashboardContentProps {
     refreshDashboardData: () => void; // Added refresh callback
     onUploadHighlightClick: () => void;
     onDeleteHighlight: (id: string) => void;
+    demandRunRate: DailyRunRateResult | null;
+    loadingRunRate: boolean;
+    runRateError: string | null;
 }
 
-const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsedCsvData, mtdAchievements, ytdAchievements, highlights, loading: isDashboardLoading, error, onUploadHighlightClick, onDeleteHighlight }) => {
+const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsedCsvData, mtdAchievements, ytdAchievements, highlights, loading: isDashboardLoading, error, onUploadHighlightClick, onDeleteHighlight, demandRunRate, loadingRunRate, runRateError }) => {
     const latestHighlight = highlights && highlights.length > 0 ? highlights[0] : null;
 
     return (
@@ -336,8 +365,45 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsed
                             color="text-orange-500" 
                         />
                     </div>
+
+                     {/* NEW: Run Rate section for admin/manager */}
+                    {loadingRunRate ? (
+                        <div className="flex justify-center py-8"><LoaderIcon /></div>
+                    ) : runRateError ? (
+                        <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-xl shadow-md text-red-700 dark:text-red-300">{runRateError}</div>
+                    ) : demandRunRate && (demandRunRate.monthlyTargetAmount > 0 || demandRunRate.monthlyTargetAccount > 0) ? (
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+                            <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2 text-center">Daily Run Rate</h4>
+                            <div className="flex flex-wrap justify-around">
+                                <RunRateBarChart
+                                    monthlyTarget={demandRunRate.monthlyTargetAmount}
+                                    mtdAchievement={demandRunRate.mtdAchievementAmount}
+                                    dailyRunRate={demandRunRate.dailyRunRateAmount}
+                                    label="Amount"
+                                    unit="INR"
+                                />
+                                <RunRateBarChart
+                                    monthlyTarget={demandRunRate.monthlyTargetAccount}
+                                    mtdAchievement={demandRunRate.mtdAchievementAccount}
+                                    dailyRunRate={demandRunRate.dailyRunRateAccount}
+                                    label="Accounts"
+                                    unit="Units"
+                                />
+                            </div>
+                            <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
+                                Days Remaining in {getMonthString()}: <span className="font-semibold">{demandRunRate.daysRemainingInMonth}</span>
+                            </div>
+                        </div>
+                    ) : (
+                         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+                            <p className="text-center text-gray-500 dark:text-gray-400 py-4">
+                                No relevant targets or achievement data found for {getMonthString()} to calculate daily run rate for your scope.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Target Achievement Analytics */}
-                    <TargetAchievementAnalytics data={parsedCsvData} user={currentUser} />
+                    <TargetAchievementAnalytics data={parsedCsvData} user={currentUser} showRunRateAnalysis={false} />
                 </>
             )}
 
@@ -376,6 +442,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
   });
   const [isHighlightModalOpen, setIsHighlightModalOpen] = useState(false);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
+
+  const [demandRunRate, setDemandRunRate] = useState<DailyRunRateResult | null>(null);
+  const [loadingRunRate, setLoadingRunRate] = useState(true);
+  const [runRateError, setRunRateError] = useState<string | null>(null);
 
 
   const isMounted = useRef(false);
@@ -446,7 +516,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
   // New function to refresh data for MTD calculation on dashboard
   const refreshDashboardData = useCallback(async () => {
     setLoading(true); // Indicate loading for dashboard data refresh
+    setLoadingRunRate(true);
     setError(null); // Clear previous errors
+    setRunRateError(null);
     const currentMonth = getMonthString();
     const currentYear = getYearString();
 
@@ -518,13 +590,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
           setMtdAchievements(mtdAch);
           setYtdAchievements(ytdAch);
         }
+
+        const runRateResult = await calculateDailyRunRateForUserScope(user, currentMonth, allRecords);
+        if (isMounted.current) {
+          setDemandRunRate(runRateResult);
+        }
+
     } catch (err) {
         if (isMounted.current) {
-            setError(err instanceof Error ? err.message : 'Failed to refresh dashboard data.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to refresh dashboard data.';
+            setError(errorMessage);
+            setRunRateError(errorMessage);
         }
     } finally {
         if (isMounted.current) {
             setLoading(false);
+            setLoadingRunRate(false);
         }
     }
   }, [user, isMounted]);
@@ -554,7 +635,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
     return {
       dashboard: user.role === 'user'
         ? <UserDashboardContent currentUser={user} parsedCsvData={parsedCsvData} />
-        : <DashboardContent {...commonProps} parsedCsvData={parsedCsvData} mtdAchievements={mtdAchievements} ytdAchievements={ytdAchievements} highlights={highlights} loading={loading} error={error} refreshDashboardData={refreshDashboardData} onUploadHighlightClick={() => setIsHighlightModalOpen(true)} onDeleteHighlight={handleDeleteHighlight} />,
+        : <DashboardContent {...commonProps} parsedCsvData={parsedCsvData} mtdAchievements={mtdAchievements} ytdAchievements={ytdAchievements} highlights={highlights} loading={loading} error={error} refreshDashboardData={refreshDashboardData} onUploadHighlightClick={() => setIsHighlightModalOpen(true)} onDeleteHighlight={handleDeleteHighlight} demandRunRate={demandRunRate} loadingRunRate={loadingRunRate} runRateError={runRateError} />,
       dailytask_achievement: <SubmitDailyAchievementPage {...dailyTaskProps} />,
       dailytask_projection: <SubmitProjectionPage {...dailyTaskProps} />,
       dailytask_demand: <ViewTodaysDemandPage user={user} data={parsedCsvData} />,
@@ -587,7 +668,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
       organizationmanagement: <OrganizationManagementPage currentUser={user} />,
       productmapping: <ProductMappingPage currentUser={user} />, // New page
     };
-  }, [user, parsedCsvData, mtdAchievements, ytdAchievements, onLogout, onUserUpdate, refreshDashboardData, loading, error, handleNavigate, highlights, handleDeleteHighlight]);
+  }, [user, parsedCsvData, mtdAchievements, ytdAchievements, onLogout, onUserUpdate, refreshDashboardData, loading, error, handleNavigate, highlights, handleDeleteHighlight, demandRunRate, loadingRunRate, runRateError]);
 
   // Main content display based on activePage
   const renderPage = () => {
