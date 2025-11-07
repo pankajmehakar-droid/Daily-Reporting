@@ -1,13 +1,47 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ProductMetric, User } from '../types';
 import { getProductMetrics, addProductMetric, updateProductMetric, removeProductMetric } from '../services/dataService';
-import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, CheckCircleIcon } from '../components/icons';
+import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, CheckCircleIcon, SearchIcon, ChevronUpIcon, ChevronDownIcon } from '../components/icons';
 
 interface ProductSettingsPageProps {
     currentUser: User; // FIX: Added currentUser prop
     onClose?: () => void; // Optional prop for modal context
     onMetricsUpdated?: () => void; // Optional prop to trigger refresh in parent
 }
+
+// Validation function for the form data
+const validateMetricForm = (formData: Omit<ProductMetric, 'id'>, existingMetrics: ProductMetric[], editingMetricId: string | null) => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+        errors.name = 'Metric Name is required.';
+    } else if (formData.name.trim().length < 3) {
+        errors.name = 'Metric Name must be at least 3 characters.';
+    } else if (existingMetrics.some(m => m.name.toLowerCase() === formData.name.trim().toLowerCase() && m.id !== editingMetricId)) {
+        errors.name = 'Metric Name must be unique.';
+    }
+
+    if (!formData.category.trim()) {
+        errors.category = 'Category is required.';
+    } else if (formData.category.trim().length < 2) {
+        errors.category = 'Category must be at least 2 characters.';
+    }
+
+    if (!formData.type) {
+        errors.type = 'Type is required.';
+    }
+
+    if (!formData.unitOfMeasure.trim()) {
+      errors.unitOfMeasure = 'Unit of Measure is required.';
+    } else if (formData.unitOfMeasure.trim().length < 1) {
+      errors.unitOfMeasure = 'Unit of Measure must be at least 1 character.';
+    }
+
+
+    return errors;
+};
 
 const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMetricsUpdated, currentUser }) => {
     // RBAC: Restrict this page to admin users only
@@ -35,6 +69,12 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
     const [formData, setFormData] = useState<Omit<ProductMetric, 'id'>>({ name: '', category: '', type: 'Other', unitOfMeasure: '', contributesToOverallGoals: false });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [formErrors, setFormErrors] = useState<Record<string, string>>({}); // New: granular form errors
+
+    // Table sorting and search states
+    const [sortConfig, setSortConfig] = useState<{ key: keyof ProductMetric; direction: 'asc' | 'desc' } | null>({ key: 'name', direction: 'asc' });
+    const [searchTerm, setSearchTerm] = useState('');
+
 
     const isMounted = useRef(false);
 
@@ -71,6 +111,7 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
     const openModal = (metric: ProductMetric | null = null) => {
         setError(null);
         setNotification(null);
+        setFormErrors({}); // Clear form errors on modal open
         if (metric) {
             setEditingMetric(metric);
             setFormData({ name: metric.name, category: metric.category, type: metric.type, unitOfMeasure: metric.unitOfMeasure, contributesToOverallGoals: metric.contributesToOverallGoals });
@@ -85,18 +126,36 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
         setIsModalOpen(false);
         setEditingMetric(null);
         setFormData({ name: '', category: '', type: 'Other', unitOfMeasure: '', contributesToOverallGoals: false });
+        setFormErrors({}); // Clear form errors on modal close
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type, checked } = e.target as HTMLInputElement;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        const newValue = type === 'checkbox' ? checked : value;
+
+        setFormData(prev => {
+            const updatedFormData = { ...prev, [name]: newValue };
+            // Validate on change to provide immediate feedback
+            const errors = validateMetricForm(updatedFormData, metrics, editingMetric?.id || null);
+            setFormErrors(errors); // Update form errors
+            return updatedFormData;
+        });
+        setNotification(null); // Clear notification on input change
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        setError(null);
         setNotification(null);
+        setError(null);
+
+        const errors = validateMetricForm(formData, metrics, editingMetric?.id || null);
+        setFormErrors(errors);
+
+        if (Object.keys(errors).length > 0) {
+            setIsSubmitting(false);
+            return;
+        }
 
         try {
             if (editingMetric) {
@@ -143,13 +202,84 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
         }
     };
 
+    const sortedAndFilteredMetrics = useMemo(() => {
+        let sortableItems = [...metrics];
+
+        // Apply search filter first
+        if (searchTerm.trim()) {
+          const lowercasedTerm = searchTerm.toLowerCase();
+          sortableItems = sortableItems.filter(metric =>
+            metric.name.toLowerCase().includes(lowercasedTerm) ||
+            metric.category.toLowerCase().includes(lowercasedTerm) ||
+            metric.type.toLowerCase().includes(lowercasedTerm) ||
+            metric.unitOfMeasure.toLowerCase().includes(lowercasedTerm)
+          );
+        }
+
+        // Then apply sorting
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                const aValue = a[sortConfig.key]?.toString() || '';
+                const bValue = b[sortConfig.key]?.toString() || '';
+
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [metrics, sortConfig, searchTerm]);
+
+    const requestSort = (key: keyof ProductMetric) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const SortableHeader: React.FC<{ columnKey: keyof ProductMetric; title: string }> = ({ columnKey, title }) => (
+        <th 
+            scope="col" 
+            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" 
+            onClick={() => requestSort(columnKey)}
+            aria-sort={sortConfig?.key === columnKey ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+        >
+            <div className="flex items-center space-x-1">
+                <span>{title}</span>
+                {sortConfig?.key === columnKey && (
+                    sortConfig.direction === 'asc' ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />
+                )}
+            </div>
+        </th>
+    );
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">{onClose ? '' : 'Product Metric'}</h2> {/* Title hidden if in modal, parent handles title */}
-                <button onClick={() => openModal()} className="btn btn-indigo flex items-center gap-2">
-                    <PlusIcon className="w-5 h-5" /> Add New Metric
-                </button>
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">{onClose ? '' : 'Product Metric'}</h2>
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-auto">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <SearchIcon className="w-5 h-5 text-gray-400" />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Search metrics..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-56 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                            aria-label="Search product metrics"
+                        />
+                    </div>
+                    <button onClick={() => openModal()} className="btn btn-indigo flex items-center justify-center gap-2">
+                        <PlusIcon className="w-5 h-5" /> Add New Metric
+                    </button>
+                </div>
             </div>
 
             {notification && (
@@ -175,23 +305,29 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th className="th-style">Metric Name</th>
-                                    <th className="th-style">Category</th>
-                                    <th className="th-style">Type</th>
-                                    <th className="th-style">Unit of Measure</th>
+                                    <SortableHeader columnKey="name" title="Metric Name" />
+                                    <SortableHeader columnKey="category" title="Category" />
+                                    <SortableHeader columnKey="type" title="Type" />
+                                    <SortableHeader columnKey="unitOfMeasure" title="Unit of Measure" />
                                     <th className="th-style">Contributes to Goals</th>
                                     <th className="th-style">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {metrics.length > 0 ? (
-                                    metrics.map(metric => (
+                                {sortedAndFilteredMetrics.length > 0 ? (
+                                    sortedAndFilteredMetrics.map(metric => (
                                         <tr key={metric.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="td-style font-medium">{metric.name}</td>
                                             <td className="td-style">{metric.category}</td>
                                             <td className="td-style">{metric.type}</td>
                                             <td className="td-style">{metric.unitOfMeasure || 'N/A'}</td>
-                                            <td className="td-style">{metric.contributesToOverallGoals ? 'Yes' : 'No'}</td>
+                                            <td className="td-style">
+                                                {metric.contributesToOverallGoals ? (
+                                                    <CheckCircleIcon className="w-5 h-5 text-green-500" aria-label="Contributes to overall goals: Yes" />
+                                                ) : (
+                                                    <XIcon className="w-5 h-5 text-red-500" aria-label="Contributes to overall goals: No" />
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <div className="flex items-center space-x-3">
                                                     <button onClick={() => openModal(metric)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300" aria-label={`Edit ${metric.name}`}><EditIcon className="w-5 h-5" /></button>
@@ -203,7 +339,7 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
                                 ) : (
                                     <tr>
                                         <td colSpan={6} className="text-center py-10 text-gray-500 dark:text-gray-400">
-                                            No product metrics defined.
+                                            {searchTerm ? `No matching metrics found for "${searchTerm}".` : 'No product metrics defined. Click "Add New Metric" to get started.'}
                                         </td>
                                     </tr>
                                 )}
@@ -225,23 +361,65 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
                                 {error && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm" role="alert">{error}</div>}
                                 <div>
                                     <label htmlFor="name" className="label-style">Metric Name</label>
-                                    <input type="text" name="name" id="name" value={formData.name} onChange={handleInputChange} required className="input-style w-full" />
+                                    <input 
+                                        type="text" 
+                                        name="name" 
+                                        id="name" 
+                                        value={formData.name} 
+                                        onChange={handleInputChange} 
+                                        required 
+                                        className={`input-style w-full ${formErrors.name ? 'input-error' : ''}`} 
+                                        aria-invalid={!!formErrors.name} 
+                                        aria-describedby="name-error"
+                                    />
+                                    {formErrors.name && <p id="name-error" className="error-text">{formErrors.name}</p>}
                                 </div>
                                 <div>
                                     <label htmlFor="category" className="label-style">Category (e.g., DDS, FD)</label>
-                                    <input type="text" name="category" id="category" value={formData.category} onChange={handleInputChange} required className="input-style w-full" />
+                                    <input 
+                                        type="text" 
+                                        name="category" 
+                                        id="category" 
+                                        value={formData.category} 
+                                        onChange={handleInputChange} 
+                                        required 
+                                        className={`input-style w-full ${formErrors.category ? 'input-error' : ''}`} 
+                                        aria-invalid={!!formErrors.category} 
+                                        aria-describedby="category-error"
+                                    />
+                                    {formErrors.category && <p id="category-error" className="error-text">{formErrors.category}</p>}
                                 </div>
                                 <div>
                                     <label htmlFor="type" className="label-style">Type</label>
-                                    <select name="type" id="type" value={formData.type} onChange={handleInputChange} className="input-style w-full" required>
+                                    <select 
+                                        name="type" 
+                                        id="type" 
+                                        value={formData.type} 
+                                        onChange={handleInputChange} 
+                                        className={`input-style w-full ${formErrors.type ? 'input-error' : ''}`} 
+                                        required 
+                                        aria-invalid={!!formErrors.type} 
+                                        aria-describedby="type-error"
+                                    >
                                         <option value="Amount">Amount</option>
                                         <option value="Account">Account</option>
                                         <option value="Other">Other</option>
                                     </select>
+                                    {formErrors.type && <p id="type-error" className="error-text">{formErrors.type}</p>}
                                 </div>
                                 <div>
                                     <label htmlFor="unitOfMeasure" className="label-style">Unit of Measure (e.g., INR, Units, %)</label>
-                                    <input type="text" name="unitOfMeasure" id="unitOfMeasure" value={formData.unitOfMeasure} onChange={handleInputChange} className="input-style w-full" />
+                                    <input 
+                                        type="text" 
+                                        name="unitOfMeasure" 
+                                        id="unitOfMeasure" 
+                                        value={formData.unitOfMeasure} 
+                                        onChange={handleInputChange} 
+                                        className={`input-style w-full ${formErrors.unitOfMeasure ? 'input-error' : ''}`} 
+                                        aria-invalid={!!formErrors.unitOfMeasure} 
+                                        aria-describedby="unitOfMeasure-error"
+                                    />
+                                    {formErrors.unitOfMeasure && <p id="unitOfMeasure-error" className="error-text">{formErrors.unitOfMeasure}</p>}
                                 </div>
                                 <div className="flex items-center">
                                     <input
@@ -259,7 +437,7 @@ const ProductSettingsPage: React.FC<ProductSettingsPageProps> = ({ onClose, onMe
                             </div>
                             <div className="flex justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700">
                                 <button type="button" onClick={closeModal} className="btn-secondary">Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="btn-primary flex items-center gap-2">
+                                <button type="submit" disabled={isSubmitting || Object.keys(formErrors).length > 0} className="btn-primary flex items-center gap-2">
                                     {isSubmitting && <LoaderIcon className="w-4 h-4" />}
                                     {isSubmitting ? 'Saving...' : 'Save'}
                                 </button>

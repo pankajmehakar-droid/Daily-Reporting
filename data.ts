@@ -111,7 +111,7 @@ export const FULL_STAFF_DATA: Omit<StaffMember, 'id'>[] = [
     districtName: 'YAVATMAL',
     branchName: 'DIGRAS',
     employeeName: 'SUSHIL GAIKWAD',
-    employeeCode: '6642',
+    employeeCode: '1347',
     function: 'BRANCH MANAGER',
     contactNumber: '9000011111',
     reportsToEmployeeCode: '270',
@@ -198,7 +198,7 @@ export const MOCK_TARGET_DATA: Target[] = [
   },
   {
     id: 'kra-2',
-    staffEmployeeCode: '6642',
+    staffEmployeeCode: '1347',
     metric: 'FD AMT',
     target: 1500000,
     period: '2024-07',

@@ -293,7 +293,7 @@ const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ data }) => {
             // FIX: Use ai.models.generateContent instead of deprecated direct call
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: prompt,
+                contents: [{text: prompt}], // Corrected to match Gemini API guidelines
             });
 
             if (isMounted.current) {

@@ -495,7 +495,7 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
                         <div className="mt-1 flex items-center gap-2">
                             {/* Amount Input */}
                             <div className="flex-1">
-                                <label htmlFor={amtMetric} className="sr-only">{amtMetric}</label>
+                                <label htmlFor={amtMetric} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Amount</label>
                                 <input
                                     type="number"
                                     id={amtMetric}
@@ -507,12 +507,12 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
                                     className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                                     min="0"
                                     placeholder="0"
-                                    aria-label={amtMetric}
+                                    aria-label={`${prefix} Amount`}
                                 />
                             </div>
                             {/* Account Input */}
                             <div className="flex-1">
-                                <label htmlFor={acMetric} className="sr-only">{acMetric}</label>
+                                <label htmlFor={acMetric} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Account</label>
                                 <input
                                     type="number"
                                     id={acMetric}
@@ -524,7 +524,7 @@ const SubmitDailyAchievementPage: React.FC<SubmitDailyAchievementPageProps> = ({
                                     className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                                     min="0"
                                     placeholder="0"
-                                    aria-label={acMetric}
+                                    aria-label={`${prefix} Account`}
                                 />
                             </div>
                         </div>

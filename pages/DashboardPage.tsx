@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { User, ParsedCsvData, CsvRecord, MtdData, Target, ProductMetric, DailyAchievementRecord, StaffMember, Branch, Projection, Demand, BranchTarget, DetailedMonthlyTargets, Highlight, DailyRunRateResult, ChartDataPoint } from '../types';
@@ -14,8 +15,9 @@ import SummaryCard from '../components/SummaryCard';
 import DataTable from '../components/DataTable';
 import FileUploadButton from '../components/FileUploadButton';
 import BarChart from '../components/BarChart';
-import PieChart from '../components/PieChart';
-import SubmitDailyAchievementPage from './SubmitDailyAchievementPage'; // New Import
+// FIX: Corrected import statements for PieChart and SubmitDailyAchievementPage
+import PieChart from '../components/PieChart'; 
+import SubmitDailyAchievementPage from './SubmitDailyAchievementPage'; 
 import SubmitProjectionPage from './SubmitProjectionPage'; // New Import
 import { ViewTodaysDemandPage } from './ViewTodaysDemandPage'; // New Import
 import AnalyticsPage from './AnalyticsPage';
@@ -118,7 +120,7 @@ const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedC
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: prompt,
+                contents: [{text: prompt}], // Corrected to match Gemini API guidelines
             });
 
             if (isMounted.current) {
@@ -174,6 +176,7 @@ const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedC
                 originalLabel: dateDDMMYYYY,
             }))
             .sort((a, b) => {
+                // FIX: Use the correct function name: convertDDMMYYYYtoYYYYMMDD
                 const dateA = new Date(convertDDMMYYYYtoYYYYMMDD(a.originalLabel!)).getTime();
                 const dateB = new Date(convertDDMMYYYYtoYYYYMMDD(b.originalLabel!)).getTime();
                 return dateA - dateB;

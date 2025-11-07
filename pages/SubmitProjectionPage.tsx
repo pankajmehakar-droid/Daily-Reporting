@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, Projection, PROJECTION_DEMAND_METRIC_NAMES } from '../types';
 import { getProjectionsForStaff, saveProjection, updateProjection } from '../services/dataService';
@@ -182,7 +183,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Submit Today's Projection</h2>
+        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Submit Daily Projection</h2>
 
         {submitSuccess && (
             <div className="bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500 text-green-700 dark:text-green-300 p-4 rounded-md flex items-start space-x-3 mb-6" role="alert">

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, StaffMember, Target, ProductMetric, DesignationTarget, Designation, TargetPeriodType } from '../types';
 import { getAllStaff, getBranches, getStaffByBranch, getTargetsForStaff, saveTarget, updateTarget, deleteTarget, getProductMetrics, getRecursiveSubordinateInfo, getDesignationTargetByDesignation } from '../services/dataService';
@@ -44,6 +45,8 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
 
     // State for ProductSettings modal
     const [isProductSettingsModalOpen, setIsProductSettingsModalOpen] = useState(false);
+    // State for delete confirmation modal
+    const [targetToDelete, setTargetToDelete] = useState<Target | null>(null);
 
 
     const isMounted = useRef(false);
@@ -407,16 +410,16 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
         }
     };
 
-    const handleDelete = async (target: Target) => {
-        if (!window.confirm(`Are you sure you want to delete the target for "${target.metric}" (${target.periodType} - ${target.period})?`)) {
-            return;
-        }
-    
+    const confirmDeleteTarget = async () => {
+        if (!targetToDelete) return;
+
         const originalTargets = [...allStaffTargets]; // Create a shallow copy for restoration
-    
+        const target = targetToDelete;
+
         // 1. Optimistically remove the item from the UI state.
         setAllStaffTargets(prevTargets => prevTargets.filter(t => t.id !== target.id));
         setNotification(null); // Clear previous notifications
+        setTargetToDelete(null); // Close the confirmation modal
     
         try {
             // 2. Perform the actual deletion.
@@ -507,8 +510,8 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
 
     // Filter product metrics for the bulk modal display (excluding grand totals for direct input)
     const editableAmountMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Amount' && m.name !== 'GRAND TOTAL AMT'), [filteredBulkMetrics]);
-    const editableAccountMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC'), [filteredBulkMetrics]);
-    const otherMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Other'), [filteredBulkMetrics]);
+    const editableAccountMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC' && m.name !== 'NEW-SS/AGNT'), [filteredBulkMetrics]);
+    const otherMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT'), [filteredBulkMetrics]);
 
     // Check if bulk submission should be disabled (e.g., no staff selected or no metrics configured for their designation)
     const isBulkSubmitDisabled = useMemo(() => {
@@ -522,13 +525,13 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
     }, [selectedStaff, productMetrics.length, designationTargets]);
 
     return (
-        <div className="space-y-6">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Staff Targets (Monthly Assignment)</h2>
 
             {notification && (
                 <div className={`p-4 rounded-md flex items-start space-x-3 border-l-4 ${notification.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-300'}`} role="alert">
                     {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6 flex-shrink-0" /> : <AlertTriangleIcon className="w-6 h-6 flex-shrink-0" />}
-                    <div><p className="font-bold">{notification.type === 'success' ? 'Success' : 'Error'}</p><p>{notification.message}</p></div>
+                    <div><p className="font-bold">{notification.type === 'success' ? 'Success!' : 'Error'}</p><p>{notification.message}</p></div>
                 </div>
             )}
             {error && !notification && (
@@ -538,10 +541,10 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                 </div>
             )}
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                     <div>
-                        <label htmlFor="staff-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <label htmlFor="staff-select" className="label-style">
                             Select Staff Member
                         </label>
                         <select
@@ -550,13 +553,14 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                             onChange={handleStaffChange}
                             value={selectedStaff?.id || ""}
                             disabled={loading || branchStaff.length === 0}
+                            aria-label="Select staff member"
                         >
                             <option value="" disabled>-- Select a staff member --</option>
                             {branchStaff.map(s => <option key={s.id} value={s.id}>{s.employeeName} ({s.employeeCode})</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="period-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <label htmlFor="period-filter" className="label-style">
                             Filter by Period
                         </label>
                         <select
@@ -565,6 +569,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                             onChange={e => setSelectedPeriodFilter(e.target.value)}
                             value={selectedPeriodFilter}
                             disabled={loading || availablePeriods.length <= 1}
+                            aria-label="Filter by target period"
                         >
                             <option value="all">All Periods</option>
                             {availablePeriods.filter(period => period !== 'all').map(period => (
@@ -573,7 +578,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="period-type-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <label htmlFor="period-type-filter" className="label-style">
                             Filter by Period Type
                         </label>
                         <select
@@ -582,6 +587,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                             onChange={e => setSelectedPeriodTypeFilter(e.target.value as TargetPeriodType | 'all')}
                             value={selectedPeriodTypeFilter}
                             disabled={loading || availablePeriodTypes.length <= 1}
+                            aria-label="Filter by target period type"
                         >
                             <option value="all">All Types</option>
                             {availablePeriodTypes.filter(type => type !== 'all').map(type => (
@@ -591,11 +597,12 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                     </div>
                 </div>
                 {selectedStaff && (
-                    <div className="flex flex-col sm:flex-row justify-end gap-3 flex-wrap">
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 flex-wrap mt-4">
                          {currentUser.role === 'admin' && ( // RBAC: Only admin can manage product metrics
                             <button
                                 onClick={() => setIsProductSettingsModalOpen(true)}
                                 className="btn btn-secondary flex items-center gap-2"
+                                aria-label="Manage product metrics settings"
                             >
                                 <SettingsIcon className="w-5 h-5" /> Manage Product Metrics
                             </button>
@@ -605,6 +612,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                 onClick={() => openBulkModal()} 
                                 className="btn btn-blue flex items-center gap-2"
                                 disabled={isBulkSubmitDisabled}
+                                aria-label="Bulk add or edit targets"
                             >
                                 <TargetIcon className="w-5 h-5" /> Bulk Add/Edit Targets
                             </button>
@@ -612,10 +620,10 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                     </div>
                 )}
                 {selectedStaff && selectedStaff.id !== ADMIN_USER_ID && currentUser.role === 'admin' && (!designationTargets || designationTargets.metricIds.length === 0) && (
-                    <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md">
+                    <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md" aria-live="polite">
                         <p className="text-sm">
                             <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
-                            No Target metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Mapping &gt; Target Mapping &gt; Designation Target Setup" to enable target submission.
+                            No Target metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Product Setting &gt; Product Mapping" to enable target submission.
                         </p>
                     </div>
                 )}
@@ -623,13 +631,13 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
 
             {selectedStaff && (
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-                    <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <div className="px-4 py-3 sm:px-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                         <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                             Targets for {selectedStaff.employeeName} ({selectedPeriodTypeFilter === 'all' ? 'All Types' : selectedPeriodTypeFilter.toUpperCase()} - {selectedPeriodFilter === 'all' ? 'All Periods' : selectedPeriodFilter})
                         </h3>
                     </div>
                     {/* Summary Cards for overall totals */}
-                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <SummaryCard 
                             title={`Total Amount`}
                             value={displayTotalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 })} 
@@ -650,81 +658,81 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                         <div className="overflow-x-auto">
                             {filteredTargets.length > 0 ? (
                                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-gray-50 dark:bg-gray-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
                                         <tr>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Metric</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Period</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Period Type</th>
-                                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Target</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Due Date</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                            <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Metric</th>
+                                            <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Period</th>
+                                            <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Period Type</th>
+                                            <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Target</th>
+                                            <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Due Date</th>
+                                            <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                                             {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can modify
-                                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                                <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky right-0 bg-gray-50 dark:bg-gray-700">Actions</th>
                                             )}
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                         {groupedDisplayTargets.amount.length > 0 && (
-                                            <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Amount Targets</td></tr>
+                                            <tr><td colSpan={7} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Amount Targets</td></tr>
                                         )}
                                         {groupedDisplayTargets.amount.map(target => {
                                             const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
                                                 <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
-                                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
+                                                    <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                                     {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can modify
-                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white dark:bg-gray-800">
                                                             <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                            <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                            <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
                                                         </td>
                                                     )}
                                                 </tr>
                                             );
                                         })}
                                         {groupedDisplayTargets.account.length > 0 && (
-                                            <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Account Targets</td></tr>
+                                            <tr><td colSpan={7} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Account Targets</td></tr>
                                         )}
                                         {groupedDisplayTargets.account.map(target => {
                                             const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
                                                 <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
-                                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
+                                                    <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                                     {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white dark:bg-gray-800">
                                                         <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                        <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                        <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
                                                       </td>
                                                     )}
                                                 </tr>
                                             );
                                         })}
                                         {groupedDisplayTargets.other.length > 0 && (
-                                            <tr><td colSpan={7} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Other Targets</td></tr>
+                                            <tr><td colSpan={7} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200">Other Targets</td></tr>
                                         )}
                                         {groupedDisplayTargets.other.map(target => {
                                             const status = getKraStatus(target.dueDate, target.periodType, target.period);
                                             return (
                                                 <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
-                                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{target.metric}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.period}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{target.periodType.toUpperCase()}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{formatDisplayDate(target.dueDate)}</td>
+                                                    <td className={`px-4 py-3 whitespace-nowrap text-sm ${status.color}`}>{status.text}</td>
                                                     {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white dark:bg-gray-800">
                                                         <button onClick={() => openBulkModalForEdit(target)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" aria-label={`Edit ${target.metric}`}><EditIcon className="w-5 h-5"/></button>
-                                                        <button onClick={() => handleDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                        <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
                                                       </td>
                                                     )}
                                                 </tr>
@@ -764,6 +772,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                             className="input-style w-full"
                                             required
                                             disabled={true}
+                                            aria-label="Target staff member"
                                         >
                                             {branchStaff.length > 0 ? (
                                                 branchStaff.map(s => <option key={s.id} value={s.id}>{s.employeeName} ({s.employeeCode})</option>)
@@ -781,13 +790,14 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                             onChange={handleBulkFormChange}
                                             required
                                             className="input-style w-full"
+                                            aria-label="Target period type"
                                         >
                                             <option value="monthly">Monthly</option>
                                             <option value="ytd">YTD</option>
                                         </select>
                                     </div>
                                     <div className="sm:col-span-2">
-                                        <label htmlFor="bulkPeriod" className="label-style">Period</label>
+                                        <label htmlFor="bulkPeriod" className="label-style">Period (YYYY-MM for Monthly, YYYY for YTD)</label>
                                         <input
                                             type={bulkFormData.periodType === 'ytd' ? 'number' : 'month'}
                                             name="period"
@@ -796,7 +806,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                             onChange={handleBulkFormChange}
                                             required
                                             className="input-style w-full"
-                                            {...(bulkFormData.periodType === 'ytd' ? { placeholder: "YYYY", min: "2020", max: "2050" } : {})}
+                                            {...(bulkFormData.periodType === 'ytd' ? { placeholder: "YYYY", min: "2020", max: "2050", 'aria-label': "Target period year" } : {'aria-label': "Target period month"})}
                                         />
                                     </div>
                                     <div className="sm:col-span-2">
@@ -808,6 +818,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                             value={bulkFormData.dueDate}
                                             onChange={handleBulkFormChange}
                                             className="input-style w-full"
+                                            aria-label="Overall due date for targets"
                                         />
                                     </div>
                                 </div>
@@ -829,6 +840,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                                         className="input-style w-full"
                                                         min="0"
                                                         placeholder="0"
+                                                        aria-label={`${metric.name} target amount`}
                                                     />
                                                 </div>
                                             ))
@@ -836,13 +848,14 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                             <p className="text-sm text-gray-500 dark:text-gray-400">No amount metrics configured for this designation.</p>
                                         )}
                                         <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
-                                            <label htmlFor="metric-GRAND TOTAL AMT" className="label-style font-bold">GRAND TOTAL AMT (INR)</label>
+                                            <label htmlFor="metric-GRAND TOTAL AMT" className="label-style font-bold">Calculated GRAND TOTAL AMT (INR)</label>
                                             <input
                                                 type="text"
                                                 id="metric-GRAND TOTAL AMT"
                                                 value={calculatedTotalAmount.toLocaleString()}
                                                 readOnly
                                                 className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
+                                                aria-label="Calculated grand total amount"
                                             />
                                         </div>
                                     </div>
@@ -863,6 +876,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                                         className="input-style w-full"
                                                         min="0"
                                                         placeholder="0"
+                                                        aria-label={`${metric.name} target accounts`}
                                                     />
                                                 </div>
                                             ))
@@ -881,17 +895,19 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                                     className="input-style w-full"
                                                     min="0"
                                                     placeholder="0"
+                                                    aria-label={`${metric.name} target`}
                                                 />
                                             </div>
                                         ))}
                                         <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
-                                            <label htmlFor="metric-GRAND TOTAL AC" className="label-style font-bold">GRAND TOTAL AC (Units)</label>
+                                            <label htmlFor="metric-GRAND TOTAL AC" className="label-style font-bold">Calculated GRAND TOTAL AC (Units)</label>
                                             <input
                                                 type="text"
                                                 id="metric-GRAND TOTAL AC"
                                                 value={calculatedTotalAccount.toLocaleString()}
                                                 readOnly
                                                 className="input-style w-full font-bold text-gray-800 dark:text-gray-100 bg-transparent border-none"
+                                                aria-label="Calculated grand total accounts"
                                             />
                                         </div>
                                     </div>
@@ -925,6 +941,31 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                     </div>
                 </div>
              )}
+            {targetToDelete && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+                        <div className="p-6 text-center">
+                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30">
+                                <AlertTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+                            </div>
+                            <h3 className="mt-5 text-lg font-medium text-gray-900 dark:text-gray-100">Delete Target</h3>
+                            <div className="mt-2">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Are you sure you want to delete the target for <strong>{targetToDelete.metric}</strong> ({targetToDelete.periodType} - {targetToDelete.period})? This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-center items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700">
+                            <button type="button" onClick={() => setTargetToDelete(null)} className="btn btn-secondary" disabled={isSubmitting}>
+                                Cancel
+                            </button>
+                            <button type="button" onClick={confirmDeleteTarget} className="btn btn-danger flex items-center gap-2" disabled={isSubmitting}>
+                                {isSubmitting && <LoaderIcon className="w-4 h-4" />}Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

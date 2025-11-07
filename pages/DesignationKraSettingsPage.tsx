@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Designation, ProductMetric, DesignationTarget, DESIGNATIONS } from '../types';
 import { getDesignationTargets, saveDesignationTarget, updateDesignationTarget, removeDesignationTarget, getProductMetrics } from '../services/dataService';
@@ -40,6 +41,7 @@ const ProductMappingPage: React.FC<ProductMappingPageProps> = ({ currentUser }) 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isMounted = useRef(false);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -87,7 +89,7 @@ const ProductMappingPage: React.FC<ProductMappingPageProps> = ({ currentUser }) 
     } else {
       setEditingDesignationTarget(null);
       setFormData({
-        designation: (DESIGNATIONS.find(d => !designationTargets.some(dt => dt.designation === d)) || '') as Designation, // Pre-select first available designation
+        designation: DESIGNATIONS[0], // Pre-select the first designation by default
         selectedMetricIds: [],
       });
     }
@@ -177,11 +179,51 @@ const ProductMappingPage: React.FC<ProductMappingPageProps> = ({ currentUser }) 
     return metricIds.map(id => productMetrics.find(pm => pm.id === id)?.name || id).join(', ');
   };
 
-  // Filter out designations that already have a Target mapping
-  const availableDesignations = useMemo(() => {
-    const existingDesignations = new Set(designationTargets.map(dtarget => dtarget.designation));
-    return DESIGNATIONS.filter(d => !existingDesignations.has(d) || (editingDesignationTarget && editingDesignationTarget.designation === d));
-  }, [designationTargets, editingDesignationTarget]);
+  // Modified: Display all designations in the dropdown. Rely on backend validation for uniqueness.
+  const allDesignations = useMemo(() => {
+    return DESIGNATIONS;
+  }, []);
+
+  // Filtered metrics for display in the modal (excluding 'DDS Target')
+  const filteredMetricsForModal = useMemo(() => {
+    return productMetrics.filter(metric => metric.name !== 'DDS Target');
+  }, [productMetrics]);
+
+  // Logic for "Select All" checkbox
+  const allVisibleMetricIds = useMemo(() => filteredMetricsForModal.map(metric => metric.id), [filteredMetricsForModal]);
+  const isAllSelected = useMemo(() => {
+      if (allVisibleMetricIds.length === 0) return false;
+      return allVisibleMetricIds.every(id => formData.selectedMetricIds.includes(id));
+  }, [allVisibleMetricIds, formData.selectedMetricIds]);
+
+  const isIndeterminate = useMemo(() => {
+      if (allVisibleMetricIds.length === 0) return false;
+      const selectedCount = formData.selectedMetricIds.filter(id => allVisibleMetricIds.includes(id)).length;
+      return selectedCount > 0 && selectedCount < allVisibleMetricIds.length;
+  }, [allVisibleMetricIds, formData.selectedMetricIds]);
+
+  const handleSelectAllMetrics = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.checked) {
+          // Add all visible metrics to selectedMetricIds, preserving existing selections if any
+          setFormData(prev => ({
+              ...prev,
+              selectedMetricIds: Array.from(new Set([...prev.selectedMetricIds, ...allVisibleMetricIds])),
+          }));
+      } else {
+          // Remove all visible metrics from selectedMetricIds
+          setFormData(prev => ({
+              ...prev,
+              selectedMetricIds: prev.selectedMetricIds.filter(id => !allVisibleMetricIds.includes(id)),
+          }));
+      }
+  };
+
+  // Set indeterminate state on the actual checkbox element
+  useEffect(() => {
+      if (selectAllCheckboxRef.current) {
+          selectAllCheckboxRef.current.indeterminate = isIndeterminate;
+      }
+  }, [isIndeterminate]);
 
   return (
     <div className="space-y-6">
@@ -269,15 +311,32 @@ const ProductMappingPage: React.FC<ProductMappingPageProps> = ({ currentUser }) 
                     disabled={!!editingDesignationTarget} // Disable if editing an existing mapping
                   >
                     <option value="" disabled>-- Select a Designation --</option>
-                    {availableDesignations.map(d => (
+                    {allDesignations.map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
                 </div>
                 <h4 className="text-md font-semibold text-gray-800 dark:text-gray-100 mt-6">Applicable Product Metrics</h4>
                 <div className="space-y-2 max-h-60 overflow-y-auto p-2 border border-gray-200 dark:border-gray-600 rounded-md">
-                  {productMetrics.length > 0 ? (
-                    productMetrics.map(metric => (
+                  {/* Select All Checkbox */}
+                  {filteredMetricsForModal.length > 0 && (
+                      <div className="flex items-center pb-2 border-b border-gray-200 dark:border-gray-600 mb-2">
+                          <input
+                              type="checkbox"
+                              id="select-all-metrics"
+                              checked={isAllSelected}
+                              onChange={handleSelectAllMetrics}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600"
+                              ref={selectAllCheckboxRef}
+                          />
+                          <label htmlFor="select-all-metrics" className="ml-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              Select All
+                          </label>
+                      </div>
+                  )}
+
+                  {filteredMetricsForModal.length > 0 ? (
+                    filteredMetricsForModal.map(metric => (
                       <div key={metric.id} className="flex items-center">
                         <input
                           type="checkbox"
