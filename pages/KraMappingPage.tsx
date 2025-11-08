@@ -1,8 +1,9 @@
+// NOTE: This file contains the TargetMappingPage component. It was previously known as KRA mapping.
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, StaffMember, Target, ProductMetric, DesignationTarget, Designation, TargetPeriodType } from '../types';
 import { getAllStaff, getBranches, getStaffByBranch, getTargetsForStaff, saveTarget, updateTarget, deleteTarget, getProductMetrics, getRecursiveSubordinateInfo, getDesignationTargetByDesignation } from '../services/dataService';
-import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, DollarSignIcon, HashIcon, SettingsIcon, CheckCircleIcon } from '../components/icons';
+import { LoaderIcon, AlertTriangleIcon, EditIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, DollarSignIcon, HashIcon, SettingsIcon, CheckCircleIcon, UsersIcon } from '../components/icons';
 import SummaryCard from '../components/SummaryCard';
 import { getMonthString, getKraStatus, formatDisplayDate, getYearString } from '../utils/dateHelpers';
 import ProductSettingsPage from './ProductSettingsPage';
@@ -513,16 +514,21 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
     const editableAccountMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Account' && m.name !== 'GRAND TOTAL AC' && m.name !== 'NEW-SS/AGNT'), [filteredBulkMetrics]);
     const otherMetrics = useMemo(() => filteredBulkMetrics.filter(m => m.type === 'Other' && m.name === 'NEW-SS/AGNT'), [filteredBulkMetrics]);
 
-    // Check if bulk submission should be disabled (e.g., no staff selected or no metrics configured for their designation)
-    const isBulkSubmitDisabled = useMemo(() => {
-        if (!selectedStaff || productMetrics.length === 0) return true; // No staff selected or no global metrics
-        
-        if (selectedStaff.id === ADMIN_USER_ID) return false; // Admin can always submit
-
-        if (!designationTargets || designationTargets.metricIds.length === 0) return true; // No KRAs configured for designation
-
-        return false;
+    // New useMemo to determine specific reasons for disabling the bulk submit button
+    const bulkSubmitDisableReason = useMemo(() => {
+        if (!selectedStaff) {
+            return "Please select a staff member to set targets for.";
+        }
+        if (productMetrics.length === 0) {
+            return "No product metrics are defined. Please configure them in 'Admin > Product Setting > Product Metric'.";
+        }
+        // This condition is for non-admin users, and if the selected staff's designation has no metrics mapped
+        if (selectedStaff.id !== ADMIN_USER_ID && (!designationTargets || designationTargets.metricIds.length === 0)) {
+            return `No target metrics are configured for "${selectedStaff.function}". Please set them in "Admin > Product Setting > Product Mapping".`;
+        }
+        return null; // Button should be enabled
     }, [selectedStaff, productMetrics.length, designationTargets]);
+
 
     return (
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -596,7 +602,44 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                         </select>
                     </div>
                 </div>
-                {selectedStaff && (
+                {/* General messages for why targets cannot be set */}
+                {!selectedStaff && branchStaff.length > 0 && (
+                    <div className="mt-4 p-3 bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-500 text-blue-700 dark:text-blue-300 rounded-md" role="alert">
+                        <p className="text-sm flex items-center">
+                            <UsersIcon className="inline-block w-4 h-4 mr-2" />
+                            Please select a staff member from the dropdown above to view and set targets.
+                        </p>
+                    </div>
+                )}
+                {selectedStaff && productMetrics.length === 0 && (
+                    <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 border-l-4 border-red-500 text-red-700 dark:text-red-300 rounded-md" role="alert">
+                        <p className="text-sm flex items-center">
+                            <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
+                            Error: No product metrics are defined in the system. Please navigate to "Admin &gt; Product Setting &gt; Product Metric" to define them.
+                        </p>
+                    </div>
+                )}
+                {branchStaff.length === 0 && !loading && (
+                    <div className="mt-4 p-3 bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-500 text-blue-700 dark:text-blue-300 rounded-md" role="alert">
+                        <p className="text-sm flex items-center">
+                            <UsersIcon className="inline-block w-4 h-4 mr-2" />
+                            No staff members found in your accessible scope. Please ensure staff are added or your assignments are correct.
+                        </p>
+                    </div>
+                )}
+
+                {/* Existing warning for designation targets for non-admin */}
+                {selectedStaff && selectedStaff.id !== ADMIN_USER_ID && (!designationTargets || designationTargets.metricIds.length === 0) && (
+                    <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md" aria-live="polite">
+                        <p className="text-sm">
+                            <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
+                            No Target metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Product Setting &gt; Product Mapping" to enable target submission.
+                        </p>
+                    </div>
+                )}
+
+                {/* Bulk Add/Edit Targets button */}
+                {selectedStaff && productMetrics.length > 0 && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
                     <div className="flex flex-col sm:flex-row justify-end gap-3 flex-wrap mt-4">
                          {currentUser.role === 'admin' && ( // RBAC: Only admin can manage product metrics
                             <button
@@ -607,25 +650,20 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                                 <SettingsIcon className="w-5 h-5" /> Manage Product Metrics
                             </button>
                         )}
-                         {(currentUser.role === 'admin' || currentUser.role === 'manager') && ( // RBAC: Admin or Manager can bulk add/edit targets
-                            <button 
-                                onClick={() => openBulkModal()} 
-                                className="btn btn-blue flex items-center gap-2"
-                                disabled={isBulkSubmitDisabled}
-                                aria-label="Bulk add or edit targets"
-                            >
-                                <TargetIcon className="w-5 h-5" /> Bulk Add/Edit Targets
-                            </button>
-                         )}
+                        <button 
+                            onClick={() => openBulkModal()} 
+                            className="btn btn-blue flex items-center gap-2"
+                            disabled={!!bulkSubmitDisableReason} // Use the new reason for disabled state
+                            aria-label="Bulk add or edit targets"
+                        >
+                            <TargetIcon className="w-5 h-5" /> Bulk Add/Edit Targets
+                        </button>
                     </div>
                 )}
-                {selectedStaff && selectedStaff.id !== ADMIN_USER_ID && currentUser.role === 'admin' && (!designationTargets || designationTargets.metricIds.length === 0) && (
-                    <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md" aria-live="polite">
-                        <p className="text-sm">
-                            <AlertTriangleIcon className="inline-block w-4 h-4 mr-2" />
-                            No Target metrics are configured for "{selectedStaff.function}". Please set them in "Admin &gt; Product Setting &gt; Product Mapping" to enable target submission.
-                        </p>
-                    </div>
+                {bulkSubmitDisableReason && !loading && ( // Display the reason if the button is disabled
+                    <p className="text-sm text-red-500 dark:text-red-400 mt-2 text-right">
+                        {bulkSubmitDisableReason}
+                    </p>
                 )}
             </div>
 
@@ -915,7 +953,7 @@ export const TargetMappingPage: React.FC<{ currentUser: User }> = ({ currentUser
                             </div>
                             <div className="flex justify-end gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 flex-shrink-0">
                                 <button type="button" onClick={closeBulkModal} className="btn-secondary">Cancel</button>
-                                <button type="submit" disabled={isSubmitting || !selectedStaff || isBulkSubmitDisabled} className="btn-primary flex items-center gap-2">
+                                <button type="submit" disabled={isSubmitting || !selectedStaff || !!bulkSubmitDisableReason} className="btn-primary flex items-center gap-2">
                                     {isSubmitting && <LoaderIcon className="w-4 h-4" />}
                                     {isSubmitting ? 'Saving...' : 'Save All Targets'}
                                 </button>

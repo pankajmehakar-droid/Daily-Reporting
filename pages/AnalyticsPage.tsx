@@ -1,4 +1,5 @@
 
+
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { ParsedCsvData, ChartDataPoint } from '../types';
@@ -293,7 +294,7 @@ const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ data }) => {
             // FIX: Use ai.models.generateContent instead of deprecated direct call
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: [{text: prompt}], // Corrected to match Gemini API guidelines
+                contents: prompt,
             });
 
             if (isMounted.current) {

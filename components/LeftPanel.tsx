@@ -1,10 +1,9 @@
-
 // FIX: Import useMemo from React
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChartPieIcon, DashboardIcon, AnalyticsIcon, SettingsIcon, UsersIcon, ChevronDownIcon, LockIcon, OfficeBuildingIcon, FileTextIcon, TargetIcon, FileDownIcon, EditIcon, Share2Icon } from './icons';
 import { User, Designation } from '../types'; // Import Designation type
 
-type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'targetmapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'organizationmanagement' | 'productmapping';
+type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'targetmapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'organizationmanagement' | 'productmapping' | 'dailytask_new_achievement_form';
 
 interface NavItem {
   title: string;
@@ -63,7 +62,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isOpen, onClose, user, activePage
       icon: EditIcon,
       roles: ['admin', 'manager', 'user'],
       submenu: [
-        { title: 'Submit Achievement', icon: FileDownIcon, page: 'dailytask_achievement', roles: ['admin', 'manager', 'user'] },
+        // Removed the "Submit Achievement (Excel)" entry
+        // { title: 'Submit Achievement (Excel)', icon: FileDownIcon, page: 'dailytask_achievement', roles: ['admin', 'manager', 'user'] },
+        { title: 'Submit Daily Achievement', icon: FileDownIcon, page: 'dailytask_new_achievement_form', roles: ['admin', 'manager', 'user'] }, // Kept as the primary entry
         { title: 'Submit Projection', icon: FileDownIcon, page: 'dailytask_projection', roles: ['admin', 'manager', 'user'] },
         { title: 'View Today\'s Demand', icon: FileDownIcon, page: 'dailytask_demand', roles: ['admin', 'manager', 'user'] },
       ]
@@ -86,14 +87,18 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isOpen, onClose, user, activePage
       submenu: [
         { title: 'User Management', icon: UsersIcon, page: 'usermanagement', roles: ['admin', 'manager'] },
         { title: 'Branch Management', icon: OfficeBuildingIcon, page: 'branchmanagement', roles: ['admin', 'manager'] },
+        { title: 'Organization Management', icon: OfficeBuildingIcon, page: 'organizationmanagement', roles: ['admin'] }, // NEW ENTRY
       ]
     },
+    // The previous standalone 'Organization' entry is now moved under 'Admin' submenu
+    /*
     { 
       title: 'Organization', 
       icon: OfficeBuildingIcon,
       page: 'organizationmanagement',
       roles: ['admin'],
     },
+    */
     { 
       title: 'Mappings', 
       icon: Share2Icon,
@@ -140,7 +145,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isOpen, onClose, user, activePage
   const filteredNavItems = useMemo(() => {
     const filterItems = (items: NavItem[]): NavItem[] => {
         return items.reduce((acc: NavItem[], item) => {
-            if (item.roles.includes(user.role)) {
+            // Check if user has at least one of the required roles AND if the item is for the current user's role OR a wider scope (e.g., admin role matches manager role item)
+            const userHasRole = item.roles.includes(user.role);
+            
+            if (userHasRole) {
                 if (item.submenu) {
                     const filteredSubmenu = filterItems(item.submenu);
                     if (filteredSubmenu.length > 0) {

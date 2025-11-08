@@ -1,11 +1,10 @@
-
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { User, ParsedCsvData, CsvRecord, MtdData, Target, ProductMetric, DailyAchievementRecord, StaffMember, Branch, Projection, Demand, BranchTarget, DetailedMonthlyTargets, Highlight, DailyRunRateResult, ChartDataPoint } from '../types';
 import { parseCsvData } from '../services/csvParser';
 import { csvData } from '../data';
 import { getStaffData, getBranches, getAllTargets, getAllProjections, getAllDemands, getAllBranchTargets, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, calculateDailyRunRateForUserScope, getDetailedMonthlyTargetsForUserScope, getRecursiveSubordinateInfo, getUserScope, getAllStaff, getHighlights, removeHighlight } from '../services/dataService'; // Added getTargetsForStaff, getProductMetrics, getDailyAchievementRecords, transformDailyAchievementsToParsedCsvData, and new global getters
-import { login, MOCK_PASSWORDS } from '../services/authService';
+import { login } from '../services/authService';
 import { getMonthString, convertYYYYMMDDtoDDMMYYYY, getTodayDateYYYYMMDD, getYearString, convertDDMMYYYYtoYYYYMMDD } from '../utils/dateHelpers'; // Import from new utility
 
 
@@ -15,9 +14,9 @@ import SummaryCard from '../components/SummaryCard';
 import DataTable from '../components/DataTable';
 import FileUploadButton from '../components/FileUploadButton';
 import BarChart from '../components/BarChart';
-// FIX: Corrected import statements for PieChart and SubmitDailyAchievementPage
+// FIX: Corrected import statements for PieChart and removed SubmitDailyAchievementPage
 import PieChart from '../components/PieChart'; 
-import SubmitDailyAchievementPage from './SubmitDailyAchievementPage'; 
+import SubmitDailyAchievementForm from './SubmitDailyAchievementForm'; // NEW IMPORT
 import SubmitProjectionPage from './SubmitProjectionPage'; // New Import
 import { ViewTodaysDemandPage } from './ViewTodaysDemandPage'; // New Import
 import AnalyticsPage from './AnalyticsPage';
@@ -34,7 +33,7 @@ import { ManagerAssignmentsPage } from './ManagerAssignmentsPage';
 import StaffAssignmentsPage from './StaffAssignmentsPage';
 import ProfileSettingsPage from './ProfileSettingsPage'; // New Import
 import BranchTargetMappingPage from './BranchTargetMappingPage'; // New Import
-import OrganizationManagementPage from './OrganizationManagementPage'; // New Import
+import OrganizationManagementPage from './OrganizationManagementPage'; // Corrected Import Path
 import { UserManagementPage } from './UserManagementPage'; // FIX: Changed import to named export
 import ProductMappingPage from './DesignationKraSettingsPage'; // New page
 import TargetAchievementAnalytics from '../components/TargetAchievementAnalytics'; // New component
@@ -46,7 +45,7 @@ import RunRateBarChart from '../components/RunRateBarChart';
 declare const XLSX: any;
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'targetmapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'organizationmanagement' | 'productmapping';
+type ActivePage = 'dashboard' | 'dailytask_achievement' | 'dailytask_projection' | 'dailytask_demand' | 'analytics' | 'reports_full' | 'reports_today_submitted' | 'reports_projection' | 'settings' | 'usermanagement' | 'branchmanagement' | 'targetmapping' | 'productsettings' | 'managerassignments' | 'staffassignments' | 'profilesettings' | 'admin_target_branch' | 'organizationmanagement' | 'productmapping' | 'dailytask_new_achievement_form';
 
 
 interface DashboardPageProps {
@@ -120,7 +119,7 @@ const UserDashboardContent: React.FC<{ currentUser: User; parsedCsvData: ParsedC
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: [{text: prompt}], // Corrected to match Gemini API guidelines
+                contents: prompt,
             });
 
             if (isMounted.current) {
@@ -295,6 +294,11 @@ interface DashboardContentProps {
 const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsedCsvData, mtdAchievements, ytdAchievements, highlights, loading: isDashboardLoading, error, onUploadHighlightClick, onDeleteHighlight, demandRunRate, loadingRunRate, runRateError }) => {
     const latestHighlight = highlights && highlights.length > 0 ? highlights[0] : null;
 
+    // Check if the latest highlight has any images
+    const hasImagesInLatestHighlight = useMemo(() => {
+        return latestHighlight?.items.some(item => item.imageUrl) ?? false;
+    }, [latestHighlight]);
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -319,13 +323,38 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ currentUser, parsed
                 </div>
             ) : (
                 <>
-                    {/* Highlight Display */}
-                    {latestHighlight && (
-                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden relative">
+                    {/* Highlight Display - Conditional Rendering for Image vs. Text Only */}
+                    {latestHighlight && latestHighlight.items.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md relative">
                             <div className="p-4">
                                 <h3 className="text-lg font-semibold text-indigo-600 dark:text-indigo-400 mb-2">Latest Highlight</h3>
-                                <img src={latestHighlight.imageUrl} alt="Highlight" className="w-full h-auto max-h-96 object-contain rounded-md" />
-                                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                
+                                {hasImagesInLatestHighlight ? (
+                                    // Render as grid with images if any image is present
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {latestHighlight.items.map((item, index) => (
+                                            <div key={index} className="flex flex-col items-center">
+                                                {item.imageUrl && (
+                                                    <img src={item.imageUrl} alt={`Highlight ${index + 1}`} className="w-full h-48 object-contain rounded-md mb-2" />
+                                                )}
+                                                {item.description && (
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 text-center">{item.description}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    // Render as animated text marquee if only text items
+                                    <div className="bg-indigo-50 dark:bg-gray-700 p-3 rounded-md">
+                                        <div className="marquee-container">
+                                            <span className="marquee-text text-lg font-medium text-indigo-800 dark:text-indigo-200">
+                                                {latestHighlight.items.map(item => item.description).join(' •  •  •  ')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
                                     Uploaded by {latestHighlight.uploadedBy} on {new Date(latestHighlight.timestamp).toLocaleDateString()}
                                 </div>
                             </div>
@@ -634,12 +663,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
     const commonProps = { currentUser: user, data: parsedCsvData };
     // Removed commonManagerProps as it was not consistently used
     const dailyTaskProps = { user: user, onDataUpdate: refreshDashboardData, onNavigate: handleNavigate }; // Pass refresh callback and onNavigate
+    const newAchievementFormProps = { user: user, onNavigate: handleNavigate }; // For the new form
 
     return {
       dashboard: user.role === 'user'
         ? <UserDashboardContent currentUser={user} parsedCsvData={parsedCsvData} />
         : <DashboardContent {...commonProps} parsedCsvData={parsedCsvData} mtdAchievements={mtdAchievements} ytdAchievements={ytdAchievements} highlights={highlights} loading={loading} error={error} refreshDashboardData={refreshDashboardData} onUploadHighlightClick={() => setIsHighlightModalOpen(true)} onDeleteHighlight={handleDeleteHighlight} demandRunRate={demandRunRate} loadingRunRate={loadingRunRate} runRateError={runRateError} />,
-      dailytask_achievement: <SubmitDailyAchievementPage {...dailyTaskProps} />,
+      // Removed the original SubmitDailyAchievementPage (Excel import)
+      // dailytask_achievement: <SubmitDailyAchievementPage {...dailyTaskProps} />,
+      // The NEW SubmitDailyAchievementForm (mimics SubmitProjectionPage) is now the primary
+      dailytask_new_achievement_form: <SubmitDailyAchievementForm {...newAchievementFormProps} />, 
       dailytask_projection: <SubmitProjectionPage {...dailyTaskProps} />,
       dailytask_demand: <ViewTodaysDemandPage user={user} data={parsedCsvData} />,
       analytics: <AnalyticsPage data={parsedCsvData} />,
@@ -668,7 +701,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, onUserUpd
       managerassignments: <ManagerAssignmentsPage currentUser={user} />,
       staffassignments: <StaffAssignmentsPage currentUser={user} />,
       admin_target_branch: <BranchTargetMappingPage currentUser={user} />,
-      organizationmanagement: <OrganizationManagementPage currentUser={user} />,
+      organizationmanagement: <OrganizationManagementPage currentUser={user} />, // Corrected path and now accessible via submenu
       productmapping: <ProductMappingPage currentUser={user} />, // New page
     };
   }, [user, parsedCsvData, mtdAchievements, ytdAchievements, onLogout, onUserUpdate, refreshDashboardData, loading, error, handleNavigate, highlights, handleDeleteHighlight, demandRunRate, loadingRunRate, runRateError]);

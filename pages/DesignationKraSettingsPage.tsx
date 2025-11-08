@@ -1,3 +1,5 @@
+// NOTE: This file contains the ProductMappingPage component.
+// It is used for mapping product metrics to designations.
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Designation, ProductMetric, DesignationTarget, DESIGNATIONS } from '../types';

@@ -78,19 +78,26 @@ const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({
       // 1. Aggregate Targets for the scope
       const aggregatedTargets: { [metric: string]: number } = {};
       
+      // Always aggregate staff's own targets if they are in the scope (which they should be for the logged-in user)
       allStaffTargets
         .filter(t => t.period === currentMonth && t.periodType === 'monthly' && employeeCodes.has(t.staffEmployeeCode))
         .forEach(target => {
           aggregatedTargets[target.metric] = (aggregatedTargets[target.metric] || 0) + target.target;
         });
       
-      allBranchTargets
-        .filter(t => t.month === currentMonth && branchNames.has(t.branchName))
-        .forEach(target => {
-          aggregatedTargets[target.metric] = (aggregatedTargets[target.metric] || 0) + target.target;
-        });
+      // ONLY aggregate branch targets for 'admin' and 'manager' roles
+      if (user.role === 'admin' || user.role === 'manager') {
+        allBranchTargets
+          .filter(t => t.month === currentMonth && branchNames.has(t.branchName))
+          .forEach(target => {
+            // Sum branch targets into aggregatedTargets. This correctly applies to managers/admins.
+            // For a regular 'user', this block will be skipped.
+            aggregatedTargets[target.metric] = (aggregatedTargets[target.metric] || 0) + target.target;
+          });
+      }
 
       // 2. Aggregate MTD Achievements from scoped data passed via props
+      // This part is fine as `data.records` is already filtered by `DashboardPage` based on `user.role`.
       const mtdAchievements: { [metric: string]: number } = {};
       const mtdRecords = data.records.filter(r => {
         const dateStr = r['DATE'] as string; // dd/mm/yyyy
@@ -173,7 +180,7 @@ const TargetAchievementAnalytics: React.FC<TargetAchievementAnalyticsProps> = ({
             setLoadingMonthlyData(false);
         }
     }
-  }, [user, data, currentMonth]);
+  }, [user, data, currentMonth, isMounted]);
 
   const fetchDailyRunRate = useCallback(async () => {
     const achievementRecords = data?.records as CsvRecord[] || [];

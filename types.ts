@@ -1,5 +1,3 @@
-
-
 export type Role = 'admin' | 'user' | 'manager';
 export type TaskPriority = 'High' | 'Medium' | 'Low';
 
@@ -178,8 +176,8 @@ export interface BranchTarget {
   id: string;
   branchName: string;
   metric: string;
-  target: number;
   month: string; // YYYY-MM
+  target: number;
   dueDate?: string; // YYYY-MM-DD
 }
 
@@ -220,6 +218,13 @@ export interface DailyAchievementRecord {
   'GRAND TOTAL AMT': number;
   [key: string]: string | number | undefined;
 }
+
+// NEW: Global list of all daily achievement numeric metrics
+export const ALL_DAILY_ACHIEVEMENT_NUMBER_METRICS = [
+    'DDS AMT', 'DAM AMT', 'MIS AMT', 'FD AMT', 'RD AMT', 'SMBG AMT', 'CUR-GOLD-AMT', 'CUR-WEL-AMT', 'SAVS-AMT', 'INSU AMT', 'TASC AMT', 'SHARE AMT',
+    'DDS AC', 'DAM AC', 'MIS AC', 'FD AC', 'RD AC', 'SMBG AC', 'CUR-GOLD-AC', 'CUR-WEL-AC', 'SAVS-AC', 'NEW-SS/AGNT', 'INSU AC', 'TASC AC', 'SHARE AC',
+    'TOTAL ACCOUNTS', 'TOTAL AMOUNTS', 'GRAND TOTAL AC', 'GRAND TOTAL AMT'
+] as const;
 
 export interface DesignationTarget {
   id: string;
@@ -270,9 +275,14 @@ export interface Demand {
   source: string; // e.g., 'Target', 'Manual Input', 'System Generated'
 }
 
+export interface HighlightItem {
+  imageUrl?: string; // Made optional
+  description: string;
+}
+
 export interface Highlight {
   id: string;
-  imageUrl: string;
+  items: HighlightItem[]; // Changed to an array of HighlightItems
   uploadedBy: string;
   timestamp: string;
 }

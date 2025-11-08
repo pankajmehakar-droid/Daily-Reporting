@@ -1,5 +1,5 @@
 
-import { StaffMember, Branch, Target, ProductMetric, Projection, Demand, BranchTarget, CsvRecord, DailyRunRateResult, DailyAchievementRecord, CsvSummary, ParsedCsvData, User, DetailedMonthlyTargets, Designation, DesignationTarget, Zone, Region, District, TargetPeriodType, Highlight } from './types';
+import { StaffMember, Branch, Target, ProductMetric, Projection, Demand, BranchTarget, CsvRecord, DailyRunRateResult, DailyAchievementRecord, CsvSummary, ParsedCsvData, User, DetailedMonthlyTargets, Designation, DesignationTarget, Zone, Region, District, TargetPeriodType, Highlight, HighlightItem } from './types';
 import { reinitializeAuth } from './authService'; // Now explicitly imported here
 import { FULL_STAFF_DATA as initialFullStaffData, MOCK_PROJECTION_DATA, MOCK_DEMAND_DATA, MOCK_BRANCH_TARGETS, MOCK_DAILY_ACHIEVEMENT_RECORDS, MOCK_TARGET_DATA, MOCK_DESIGNATION_TARGETS as initialDesignationTargets, MOCK_ZONES as initialZones, MOCK_REGIONS as initialRegions, MOCK_DISTRICTS as initialDistricts, MOCK_HIGHLIGHTS } from '../data'; // Import canonical staff data and new mock data arrays
 import { getDaysInMonth, getDaysRemainingInMonth, getTodayDateYYYYMMDD, getMonthString, convertDDMMYYYYtoYYYYMMDD, getYearString } from '../utils/dateHelpers'; // FIX: Added convertDDMMYYYYtoYYYYMMDD, getYearString
@@ -338,7 +338,7 @@ export class BranchDeletionError extends Error {
 export const getUserScope = async (user: User): Promise<{ employeeCodes: Set<string>, branchNames: Set<string> }> => {
     // This needs allStaff and allBranches, so it should fetch them.
     const allStaffMembers = await getAllStaff();
-    const allBranches = await getBranches();
+    const allBranches = await getAllBranches();
 
     const relevantEmployeeCodes = new Set<string>();
     const relevantBranchNames = new Set<string>();
@@ -405,6 +405,11 @@ export const getStaffByBranch = (branchName: string): Promise<StaffMember[]> => 
 
 // Get all branches
 export const getBranches = (): Promise<Branch[]> => {
+    return Promise.resolve([...MOCK_BRANCHES]);
+};
+
+// Renamed to getAllBranches for clarity and to avoid confusion with the public getBranches that filters
+export const getAllBranches = (): Promise<Branch[]> => {
     return Promise.resolve([...MOCK_BRANCHES]);
 };
 
@@ -1399,7 +1404,7 @@ export const calculateDailyRunRateForOverall = async ({ currentMonth, achievemen
 
 export const calculateDailyRunRateForUserScope = async (user: User, currentMonth: string, achievementRecords: CsvRecord[]): Promise<DailyRunRateResult> => {
     const allStaffMembers = await getAllStaff();
-    const allBranches = await getBranches();
+    const allBranches = await getAllBranches();
 
     if (user.role === 'admin') {
         return calculateDailyRunRateForOverall({ currentMonth, achievementRecords });

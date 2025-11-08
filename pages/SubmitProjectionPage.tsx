@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, Projection, PROJECTION_DEMAND_METRIC_NAMES } from '../types';
 import { getProjectionsForStaff, saveProjection, updateProjection } from '../services/dataService';
@@ -33,11 +32,14 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
     let totalAmount = 0;
     let totalAccount = 0;
     PROJECTION_DEMAND_METRIC_NAMES.forEach(metric => {
-        const value = Number(formData[metric]) || 0;
-        if (metric.includes('AMT')) {
-            totalAmount += value;
-        } else if (metric.includes('AC') || metric === 'NEW-SS/AGNT') {
-            totalAccount += value;
+        // Exclude 'AMT' and 'AC' from explicit sum if they are themselves "GRAND TOTAL" for consistency
+        if (!metric.includes('TOTAL') && !metric.includes('GRAND TOTAL')) {
+            const value = Number(formData[metric]) || 0;
+            if (metric.includes('AMT')) {
+                totalAmount += value;
+            } else if (metric.includes('AC') || metric === 'NEW-SS/AGNT') { // NEW-SS/AGNT counts as an account
+                totalAccount += value;
+            }
         }
     });
     return { grandTotalAmount: totalAmount, grandTotalAccount: totalAccount };
@@ -60,6 +62,11 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
                   date: date,
                   staffEmployeeCode: employeeCode,
               };
+              // Initialize all metrics to 0 first, then overwrite with existing values
+              PROJECTION_DEMAND_METRIC_NAMES.forEach(metric => {
+                  newFormData[metric] = 0; // Default to 0
+              });
+
               projections.forEach(p => {
                   newFormData[p.metric] = p.value;
               });
@@ -81,10 +88,15 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value,
-    }));
+    setFormData(prev => {
+        const updatedFormData = {
+            ...prev,
+            [name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value,
+        };
+        // Also update the calculated grand totals immediately
+        // This is done by triggering the `useMemo` dependency for `grandTotalAmount`/`grandTotalAccount`
+        return updatedFormData;
+    });
     // Clear error for this specific field if it was set
     setError(null);
     setSubmitSuccess(false); // Clear success message on input change
@@ -102,25 +114,22 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
         PROJECTION_DEMAND_METRIC_NAMES.forEach(metric => {
             const existingProjection = currentProjections.find(p => p.metric === metric);
             
-            // Only process if the metric has an existing projection or was touched in the form
-            if (existingProjection || formData.hasOwnProperty(metric)) {
-                const value = Number(formData[metric]) || 0;
+            // Get value from form data, default to 0 if not present
+            const value = Number(formData[metric]) || 0;
 
-                if (existingProjection) {
-                    // Update if value is different
-                    if (existingProjection.value !== value) {
-                        promises.push(updateProjection(existingProjection.id, { value }));
-                    }
-                } else {
-                    // Create a new one since it was touched and didn't exist before.
-                    // This will save projections for 0 if the user explicitly interacted with the field.
-                    promises.push(saveProjection({
-                        staffEmployeeCode: user.employeeCode || '',
-                        date: formData.date,
-                        metric: metric,
-                        value: value,
-                    }));
+            if (existingProjection) {
+                // Update if value is different
+                if (existingProjection.value !== value) {
+                    promises.push(updateProjection(existingProjection.id, { value }));
                 }
+            } else {
+                // Create a new one if it was explicitly set (even to 0) and didn't exist before.
+                promises.push(saveProjection({
+                    staffEmployeeCode: user.employeeCode || '',
+                    date: formData.date,
+                    metric: metric,
+                    value: value,
+                }));
             }
         });
 
@@ -275,7 +284,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
                                 <div className="mt-1 flex items-center gap-2">
                                     {/* Amount Input */}
                                     <div className="flex-1">
-                                        <label htmlFor={amtMetric} className="sr-only">{amtMetric}</label>
+                                        <label htmlFor={amtMetric} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Amount</label>
                                         <input
                                             type="number"
                                             id={amtMetric}
@@ -286,12 +295,12 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
                                             className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                                             min="0"
                                             placeholder="0"
-                                            aria-label={amtMetric}
+                                            aria-label={`${prefix} Amount`}
                                         />
                                     </div>
                                     {/* Account Input */}
                                     <div className="flex-1">
-                                        <label htmlFor={acMetric} className="sr-only">{acMetric}</label>
+                                        <label htmlFor={acMetric} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Account</label>
                                         <input
                                             type="number"
                                             id={acMetric}
@@ -302,7 +311,7 @@ const SubmitProjectionPage: React.FC<SubmitProjectionPageProps> = ({ user, onNav
                                             className="mt-1 block w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                                             min="0"
                                             placeholder="0"
-                                            aria-label={acMetric}
+                                            aria-label={`${prefix} Account`}
                                         />
                                     </div>
                                 </div>

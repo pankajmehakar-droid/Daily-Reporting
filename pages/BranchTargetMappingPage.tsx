@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BranchTarget, Branch, ProductMetric, User } from '../types';
 import { getBranches, getProductMetrics, getBranchTargets, saveBranchTarget, updateBranchTarget, deleteBranchTarget } from '../services/dataService';
-import { LoaderIcon, AlertTriangleIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, CheckCircleIcon, DollarSignIcon, HashIcon } from '../components/icons';
+import { LoaderIcon, AlertTriangleIcon, XIcon, PlusIcon, TrashIcon, TargetIcon, CalendarIcon, CheckCircleIcon, DollarSignIcon, HashIcon, EditIcon } from '../components/icons'; // Added EditIcon
 import SummaryCard from '../components/SummaryCard';
-import { getMonthString } from '../utils/dateHelpers'; // Import from new utility
+import { getMonthString, formatDisplayDate, getKraStatus } from '../utils/dateHelpers'; // Import from new utility
 
 
 const formatDate = (dateString: string | undefined) => {
@@ -11,22 +11,6 @@ const formatDate = (dateString: string | undefined) => {
     // dateString is YYYY-MM-DD
     const date = new Date(dateString + 'T00:00:00'); // To avoid timezone issues
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
-const getStatus = (dueDate: string | undefined) => {
-    if (!dueDate) return { text: 'N/A', color: 'text-gray-500 dark:text-gray-400' };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate + 'T00:00:00');
-    
-    if (due < today) {
-        return { text: 'Overdue', color: 'text-red-500 font-semibold' };
-    }
-    const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 7) {
-        return { text: `Due in ${diffDays} day(s)`, color: 'text-yellow-600 dark:text-yellow-400' };
-    }
-    return { text: formatDate(dueDate), color: 'text-gray-600 dark:text-gray-300' };
 };
 
 // New type for bulk form data
@@ -64,6 +48,7 @@ const BranchTargetMappingPage: React.FC<BranchTargetMappingPageProps> = ({ curre
         metrics: {},
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [targetToDelete, setTargetToDelete] = useState<BranchTarget | null>(null); // State for delete confirmation
 
     const isMounted = useRef(false);
 
@@ -290,43 +275,97 @@ const BranchTargetMappingPage: React.FC<BranchTargetMappingPageProps> = ({ curre
         }
     };
 
+    const confirmDeleteTarget = async () => {
+        if (!targetToDelete) return;
+
+        const originalTargets = [...branchTargets]; // Create a shallow copy for restoration
+        const target = targetToDelete;
+
+        // 1. Optimistically remove the item from the UI state.
+        setBranchTargets(prevTargets => prevTargets.filter(t => t.id !== target.id));
+        setDisplayedTargets(prevTargets => prevTargets.filter(t => t.id !== target.id)); // Also update filtered list
+        setNotification(null); // Clear previous notifications
+        setTargetToDelete(null); // Close the confirmation modal
+    
+        try {
+            // 2. Perform the actual deletion.
+            await deleteBranchTarget(target.id);
+            
+            // 3. On success, the optimistic update was correct. Show a success message.
+            if (isMounted.current) {
+                setNotification({ 
+                    message: `Target for ${target.metric} deleted successfully.`, 
+                    type: 'success' 
+                });
+                // Re-fetch and filter to ensure data consistency after deletion, especially for totals calculation
+                fetchAndFilterTargets(selectedBranch?.branchName || '', selectedMonth);
+            }
+    
+        } catch (err) {
+            // 4. On failure, revert the UI state and show a persistent error.
+            if (isMounted.current) {
+                // Restore the full list from the backup copy
+                setBranchTargets(originalTargets);
+                setNotification({ 
+                    message: err instanceof Error ? err.message : "Failed to delete target. The item has been restored.", 
+                    type: 'error' 
+                });
+            }
+        }
+    };
+
 
     // Calculate totals for the main DISPLAY
-    const { displayTotalAmount, displayTotalAccount } = useMemo(() => {
+    const { displayTotalAmount, displayTotalAccount, groupedDisplayTargets, grandTotalAmountTarget, grandTotalAccountTarget } = useMemo(() => {
         let totalAmount = 0;
         let totalAccount = 0;
         
-        displayedTargets.forEach(target => {
+        let localAmountTargets: BranchTarget[] = [];
+        let localAccountTargets: BranchTarget[] = [];
+        let localOtherTargets: BranchTarget[] = [];
+
+        // Extract grand total targets first
+        const foundGrandTotalAmtTarget = displayedTargets.find(t => t.metric === 'GRAND TOTAL AMT');
+        const foundGrandTotalAcTarget = displayedTargets.find(t => t.metric === 'GRAND TOTAL AC');
+
+        const nonGrandTotalTargets = displayedTargets.filter(t => t.metric !== 'GRAND TOTAL AMT' && t.metric !== 'GRAND TOTAL AC');
+
+        nonGrandTotalTargets.forEach(target => {
             const metricDef = productMetrics.find(pm => pm.name === target.metric);
             if (metricDef) {
                 if (metricDef.type === 'Amount') {
-                    // Sum only if not 'GRAND TOTAL AMT'
-                    if (metricDef.name !== 'GRAND TOTAL AMT') {
-                        totalAmount += target.target;
-                    }
+                    localAmountTargets.push(target);
+                    totalAmount += target.target;
                 } else if (metricDef.type === 'Account') {
-                     // Sum only if not 'GRAND TOTAL AC' and not 'NEW-SS/AGNT'
-                    if (metricDef.name !== 'GRAND TOTAL AC' && metricDef.name !== 'NEW-SS/AGNT') {
+                    localAccountTargets.push(target);
+                    // Sum only if not 'NEW-SS/AGNT' (which is handled in 'other')
+                    if (metricDef.name !== 'NEW-SS/AGNT') { 
+                        totalAccount += target.target;
+                    }
+                } else { // Type 'Other', e.g., NEW-SS/AGNT
+                    localOtherTargets.push(target);
+                    if (metricDef.name === 'NEW-SS/AGNT') { // Special handling for NEW-SS/AGNT
                         totalAccount += target.target;
                     }
                 }
             }
         });
 
-        // Ensure Grand Totals reflect calculated sums
-        const grandTotalAmtTarget = displayedTargets.find(t => t.metric === 'GRAND TOTAL AMT');
-        if (grandTotalAmtTarget) {
-            totalAmount = grandTotalAmtTarget.target;
-        }
+        // Use defined grand totals if present, otherwise use calculated sums
+        const finalDisplayTotalAmount = foundGrandTotalAmtTarget ? foundGrandTotalAmtTarget.target : totalAmount;
+        const finalDisplayTotalAccount = foundGrandTotalAcTarget ? foundGrandTotalAcTarget.target : totalAccount;
 
-        const grandTotalAcTarget = displayedTargets.find(t => t.metric === 'GRAND TOTAL AC');
-        if (grandTotalAcTarget) {
-            totalAccount = grandTotalAcTarget.target;
-        }
+        // Sort for consistent display
+        localAmountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        localAccountTargets.sort((a, b) => a.metric.localeCompare(b.metric));
+        localOtherTargets.sort((a, b) => a.metric.localeCompare(b.metric));
 
         return {
-            displayTotalAmount: totalAmount,
-            displayTotalAccount: totalAccount,
+            displayTotalAmount: finalDisplayTotalAmount,
+            displayTotalAccount: finalDisplayTotalAccount,
+            groupedDisplayTargets: { amount: localAmountTargets, account: localAccountTargets, other: localOtherTargets },
+            grandTotalAmountTarget: foundGrandTotalAmtTarget,
+            grandTotalAccountTarget: foundGrandTotalAcTarget,
         };
     }, [displayedTargets, productMetrics]);
 
@@ -459,9 +498,130 @@ const BranchTargetMappingPage: React.FC<BranchTargetMappingPageProps> = ({ curre
                     ) : (
                         <div className="p-6 text-center text-gray-700 dark:text-gray-300">
                             {displayedTargets.length > 0 ? (
-                                <p className="text-base">
-                                    Targets are defined for this month. Click "Bulk Add/Edit Targets" to view or modify individual metrics.
-                                </p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead className="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Metric</th>
+                                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Target</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Due Date</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                            {groupedDisplayTargets.amount.length > 0 && (
+                                                <tr><td colSpan={5} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200 text-left">Amount Targets</td></tr>
+                                            )}
+                                            {groupedDisplayTargets.amount.map(target => {
+                                                const status = getKraStatus(target.dueDate, 'monthly', target.month); // Assuming monthly period type for display
+                                                return (
+                                                    <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-left">{target.metric}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-left">{formatDisplayDate(target.dueDate)}</td>
+                                                        <td className={`px-4 py-3 whitespace-nowrap text-sm text-left ${status.color}`}>{status.text}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium">
+                                                            <button 
+                                                                onClick={() => openBulkModal()} // Direct to bulk edit for now
+                                                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" 
+                                                                aria-label={`Edit ${target.metric}`}
+                                                            >
+                                                                <EditIcon className="w-5 h-5"/>
+                                                            </button>
+                                                            <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {groupedDisplayTargets.account.length > 0 && (
+                                                <tr><td colSpan={5} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200 text-left">Account Targets</td></tr>
+                                            )}
+                                            {groupedDisplayTargets.account.map(target => {
+                                                const status = getKraStatus(target.dueDate, 'monthly', target.month);
+                                                return (
+                                                    <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-left">{target.metric}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-left">{formatDisplayDate(target.dueDate)}</td>
+                                                        <td className={`px-4 py-3 whitespace-nowrap text-sm text-left ${status.color}`}>{status.text}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium">
+                                                            <button 
+                                                                onClick={() => openBulkModal()} 
+                                                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" 
+                                                                aria-label={`Edit ${target.metric}`}
+                                                            >
+                                                                <EditIcon className="w-5 h-5"/>
+                                                            </button>
+                                                            <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {groupedDisplayTargets.other.length > 0 && (
+                                                <tr><td colSpan={5} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 font-semibold text-gray-700 dark:text-gray-200 text-left">Other Targets</td></tr>
+                                            )}
+                                            {groupedDisplayTargets.other.map(target => {
+                                                const status = getKraStatus(target.dueDate, 'monthly', target.month);
+                                                return (
+                                                    <tr key={target.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-left">{target.metric}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-right">{target.target.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-left">{formatDisplayDate(target.dueDate)}</td>
+                                                        <td className={`px-4 py-3 whitespace-nowrap text-sm text-left ${status.color}`}>{status.text}</td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium">
+                                                            <button 
+                                                                onClick={() => openBulkModal()} 
+                                                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" 
+                                                                aria-label={`Edit ${target.metric}`}
+                                                            >
+                                                                <EditIcon className="w-5 h-5"/>
+                                                            </button>
+                                                            <button onClick={() => setTargetToDelete(target)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${target.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {/* Render GRAND TOTAL AMT and GRAND TOTAL AC at the bottom */}
+                                            {grandTotalAmountTarget && (
+                                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 font-bold bg-gray-50 dark:bg-gray-700">
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-left">{grandTotalAmountTarget.metric}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 dark:text-gray-100 text-right">{grandTotalAmountTarget.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-left">{formatDisplayDate(grandTotalAmountTarget.dueDate)}</td>
+                                                    <td className={`px-4 py-3 whitespace-nowrap text-sm text-left ${getKraStatus(grandTotalAmountTarget.dueDate, 'monthly', grandTotalAmountTarget.month).color}`}>{getKraStatus(grandTotalAmountTarget.dueDate, 'monthly', grandTotalAmountTarget.month).text}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium">
+                                                        <button 
+                                                            onClick={() => openBulkModal()} 
+                                                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" 
+                                                            aria-label={`Edit ${grandTotalAmountTarget.metric}`}
+                                                        >
+                                                            <EditIcon className="w-5 h-5"/>
+                                                        </button>
+                                                        <button onClick={() => setTargetToDelete(grandTotalAmountTarget)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${grandTotalAmountTarget.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {grandTotalAccountTarget && (
+                                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 font-bold bg-gray-50 dark:bg-gray-700">
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-left">{grandTotalAccountTarget.metric}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 dark:text-gray-100 text-right">{grandTotalAccountTarget.target.toLocaleString('en-IN')}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 text-left">{formatDisplayDate(grandTotalAccountTarget.dueDate)}</td>
+                                                    <td className={`px-4 py-3 whitespace-nowrap text-sm text-left ${getKraStatus(grandTotalAccountTarget.dueDate, 'monthly', grandTotalAccountTarget.month).color}`}>{getKraStatus(grandTotalAccountTarget.dueDate, 'monthly', grandTotalAccountTarget.month).text}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium">
+                                                        <button 
+                                                            onClick={() => openBulkModal()} 
+                                                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mx-2" 
+                                                            aria-label={`Edit ${grandTotalAccountTarget.metric}`}
+                                                        >
+                                                            <EditIcon className="w-5 h-5"/>
+                                                        </button>
+                                                        <button onClick={() => setTargetToDelete(grandTotalAccountTarget)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" aria-label={`Delete ${grandTotalAccountTarget.metric}`}><TrashIcon className="w-5 h-5"/></button>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
                                 <p className="text-base">
                                     No Target defined for this branch for the current month.
@@ -620,6 +780,31 @@ const BranchTargetMappingPage: React.FC<BranchTargetMappingPageProps> = ({ curre
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {targetToDelete && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+                        <div className="p-6 text-center">
+                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30">
+                                <AlertTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+                            </div>
+                            <h3 className="mt-5 text-lg font-medium text-gray-900 dark:text-gray-100">Delete Target</h3>
+                            <div className="mt-2">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Are you sure you want to delete the target for <strong>{targetToDelete.metric}</strong> ({targetToDelete.month})? This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-center items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700">
+                            <button type="button" onClick={() => setTargetToDelete(null)} className="btn btn-secondary" disabled={isSubmitting}>
+                                Cancel
+                            </button>
+                            <button type="button" onClick={confirmDeleteTarget} className="btn btn-danger flex items-center gap-2" disabled={isSubmitting}>
+                                {isSubmitting && <LoaderIcon className="w-4 h-4" />}Delete
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
